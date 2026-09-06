@@ -113,6 +113,8 @@ class RegistryEngine:
             ):
                 device["power_entity"] = "sensor.zeus_elwa_power"
                 device["temperature_entity"] = "sensor.zeus_elwa_temperature"
+                device["energy_entity"] = "sensor.zeus_elwa_energy"
+                device["energy_type"] = "cumulative"
                 # Direct Modbus owns element-temperature evidence too. Keep the
                 # separate boiler/DHW sensor untouched: register 1001 is the
                 # ELWA element temperature, not the tank temperature.

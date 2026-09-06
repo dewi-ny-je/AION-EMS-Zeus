@@ -481,4 +481,3 @@ class PlanningEngine:
             "attribute_payload": "compact",
             "full_history_retained_internally": True,
         }
-

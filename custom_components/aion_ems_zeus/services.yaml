@@ -268,7 +268,6 @@ clear_tariff_settings:
   description: Disable Finance calculations and clear active fixed tariffs.
 
 
-
 save_battery_capacity:
   name: Save battery capacity
   description: Persist usable battery capacity across Home Assistant restarts.
@@ -375,7 +374,6 @@ save_home_profile:
       selector:
         select:
           options: [short, normal, detailed]
-
 
 
 set_data_epoch:

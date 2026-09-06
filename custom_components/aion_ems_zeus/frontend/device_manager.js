@@ -822,12 +822,18 @@ class AionEmsEnergyFlowDashboard extends HTMLElement {
       topology:[...live,'sensor.aion_ems_zeus_energy_topology'],flow:live,kiosk:[...live,'sensor.aion_ems_zeus_device_analytics'],
       hyper_analytics:[...live,'sensor.aion_ems_zeus_historical_analytics','sensor.aion_ems_zeus_historical_chart_data','sensor.aion_ems_zeus_hyper_analytics','sensor.aion_ems_zeus_observation_knowledge','sensor.aion_ems_zeus_reasoning_explain','sensor.aion_ems_zeus_zeus_brain','sensor.aion_ems_zeus_finance_summary','sensor.aion_ems_zeus_forecast','sensor.aion_ems_zeus_device_analytics'],
       finance:['sensor.aion_ems_zeus_finance_summary','sensor.aion_ems_zeus_grid_cost_today','sensor.aion_ems_zeus_export_revenue_today','sensor.aion_ems_zeus_solar_value_today','sensor.aion_ems_zeus_net_benefit_today'],
+      tariffs:['sensor.aion_ems_zeus_finance_summary'],
       forecast:[...live,'sensor.aion_ems_zeus_forecast','sensor.aion_ems_zeus_forecast_today','sensor.aion_ems_zeus_forecast_tomorrow','sensor.aion_ems_zeus_predictive_battery','sensor.aion_ems_zeus_weather_context','sensor.aion_ems_zeus_local_weather_observation'],
       planning:[...live,'sensor.aion_ems_zeus_predictive_battery','sensor.aion_ems_zeus_learning_preview','sensor.aion_ems_zeus_planning_engine','sensor.aion_ems_zeus_forecast','sensor.aion_ems_zeus_finance_summary','sensor.aion_ems_zeus_daily_briefing','sensor.aion_ems_zeus_historical_analytics','sensor.aion_ems_zeus_historical_chart_data','sensor.aion_ems_zeus_intelligence_engine','sensor.aion_ems_zeus_device_analytics','sensor.aion_ems_zeus_device_energy_attribution'],
       energy_plan:[...live,'sensor.aion_ems_zeus_predictive_battery','sensor.aion_ems_zeus_learning_preview','sensor.aion_ems_zeus_planning_engine','sensor.aion_ems_zeus_forecast','sensor.aion_ems_zeus_finance_summary','sensor.aion_ems_zeus_daily_briefing','sensor.aion_ems_zeus_historical_analytics','sensor.aion_ems_zeus_historical_chart_data','sensor.aion_ems_zeus_intelligence_engine','sensor.aion_ems_zeus_device_analytics','sensor.aion_ems_zeus_device_energy_attribution'],
       planning_battery:[...live,'sensor.aion_ems_zeus_predictive_battery','sensor.aion_ems_zeus_learning_preview','sensor.aion_ems_zeus_forecast'],
       intelligence:['sensor.aion_ems_zeus_ai_energy_advisor','sensor.aion_ems_zeus_intelligence_engine','sensor.aion_ems_zeus_scheduler_preview','sensor.aion_ems_zeus_forecast','sensor.aion_ems_zeus_daily_briefing','sensor.aion_ems_zeus_home_efficiency','sensor.aion_ems_zeus_learning_preview','sensor.aion_ems_zeus_planning_engine','sensor.aion_ems_zeus_prediction_accuracy'],
       statistics_hub:[...live,'sensor.aion_ems_zeus_historical_analytics','sensor.aion_ems_zeus_historical_chart_data','sensor.aion_ems_zeus_historical_explorer_recent','sensor.aion_ems_zeus_historical_explorer_year','sensor.aion_ems_zeus_consumption_intelligence_evidence','sensor.aion_ems_zeus_finance_summary','sensor.aion_ems_zeus_device_analytics'],
+      solar_statistics:[...live,'sensor.aion_ems_zeus_historical_analytics','sensor.aion_ems_zeus_historical_chart_data','sensor.aion_ems_zeus_solar_performance_evidence','sensor.aion_ems_zeus_finance_summary','sensor.aion_ems_zeus_forecast'],
+      grid_statistics:[...live,'sensor.aion_ems_zeus_historical_analytics','sensor.aion_ems_zeus_historical_chart_data','sensor.aion_ems_zeus_finance_summary'],
+      battery_statistics:[...live,'sensor.aion_ems_zeus_historical_analytics','sensor.aion_ems_zeus_historical_chart_data','sensor.aion_ems_zeus_battery_performance_evidence','sensor.aion_ems_zeus_predictive_battery','sensor.aion_ems_zeus_finance_summary'],
+      heat_pump_statistics:['sensor.aion_ems_zeus_device_analytics','sensor.aion_ems_zeus_heat_pump_intelligence','sensor.aion_ems_zeus_historical_analytics','sensor.aion_ems_zeus_finance_summary'],
+      dhw_statistics:['sensor.aion_ems_zeus_device_analytics','sensor.aion_ems_zeus_device_energy_attribution','sensor.aion_ems_zeus_historical_analytics','sensor.aion_ems_zeus_finance_summary'],
       reports:['sensor.aion_ems_zeus_historical_analytics','sensor.aion_ems_zeus_historical_chart_data','sensor.aion_ems_zeus_finance_summary','sensor.aion_ems_zeus_daily_briefing','sensor.aion_ems_zeus_device_analytics'],
       device_intelligence:['sensor.aion_ems_zeus_device_energy_attribution','sensor.aion_ems_zeus_device_analytics','sensor.aion_ems_zeus_historical_analytics','sensor.aion_ems_zeus_historical_chart_data','sensor.aion_ems_zeus_finance_summary','sensor.aion_ems_zeus_energy_flow'],
       battery_intelligence:['sensor.aion_ems_zeus_device_energy_attribution','sensor.aion_ems_zeus_device_analytics','sensor.aion_ems_zeus_historical_analytics','sensor.aion_ems_zeus_historical_chart_data','sensor.aion_ems_zeus_finance_summary','sensor.aion_ems_zeus_energy_flow','sensor.aion_ems_zeus_battery_soc','sensor.aion_ems_zeus_battery_charge_power','sensor.aion_ems_zeus_battery_discharge_power'],
@@ -1165,14 +1171,19 @@ class AionEmsEnergyFlowDashboard extends HTMLElement {
       daily_report:{label:'Welcome',icon:'mdi:home-heart',section:'welcome',renderer:'briefingPage',note:'Daily briefing and intelligence landing page'},
       dashboard:{alias:'executive_overview'},
       briefing:{label:'Briefing',icon:'mdi:radar',section:'welcome',renderer:'intelligenceBriefingPage',note:'Cross-domain Zeus intelligence briefing'},
-      energy_status:{label:'Energy Status',icon:'mdi:gauge',section:'energy',renderer:'energyStatusPage',note:'Solar, battery and grid status in one view'},
-      energy_plan:{label:'Energy Plan',icon:'mdi:calendar-check-outline',section:'energy',renderer:'energyPlanPage',note:'Today plan and recommendation-only scenarios in one view'},
+      energy_status:{label:'Status',icon:'mdi:gauge',section:'energy',renderer:'energyStatusPage',note:'Solar, battery and grid status in one view'},
+      energy_plan:{label:'Plan',icon:'mdi:calendar-check-outline',section:'energy',renderer:'energyPlanPage',note:'Today plan and recommendation-only scenarios in one view'},
       solar:{alias:'energy_status'},
       battery:{alias:'battery_statistics'},
-      battery_statistics:{label:'Battery Statistics',icon:'mdi:battery-heart-variant',section:'statistics',renderer:'batteryStatisticsPage',note:'Battery state, measured charge/discharge history and performance'},
+      solar_statistics:{label:'Solar',icon:'mdi:solar-power-variant-outline',section:'domain_statistics',renderer:'solarStatisticsPage',note:'Measured solar production, history and performance'},
+      grid_statistics:{label:'Grid',icon:'mdi:transmission-tower',section:'domain_statistics',renderer:'gridDomainStatisticsPage',note:'Measured grid import/export, history and performance'},
+      battery_statistics:{label:'Battery',icon:'mdi:battery-heart-variant',section:'domain_statistics',renderer:'batteryStatisticsPage',note:'Battery state, measured charge/discharge history and performance'},
+      heat_pump_statistics:{label:'Heat Pump',icon:'mdi:heat-pump-outline',section:'domain_statistics',renderer:'heatPumpDomainStatisticsPage',note:'Heat Pump electrical, thermal, COP, runtime and cycle statistics'},
+      dhw_statistics:{label:'DHW',icon:'mdi:water-boiler',section:'domain_statistics',renderer:'dhwDomainStatisticsPage',note:'Domestic hot-water energy, temperature and source statistics'},
       grid:{alias:'energy_status'},
-      finance:{label:'Finance',icon:'mdi:cash-multiple',section:'top',renderer:'financeUnifiedPage',note:'Whole-home value, battery savings and device finance in one place'},
-      dynamic_tariffs:{label:'Dynamic Tariffs',icon:'mdi:chart-timeline-variant-shimmer',section:'top',renderer:'dynamicTariffsPage',note:'Import timestamped market prices from Home Assistant automations'},
+      finance:{label:'Analytics',icon:'mdi:cash-multiple',section:'finance',renderer:'financeUnifiedPage',note:'Whole-home value, battery savings and device finance in one place'},
+      dynamic_tariffs:{label:'Dynamic Tariffs',icon:'mdi:chart-timeline-variant-shimmer',section:'finance',renderer:'dynamicTariffsPage',note:'Import timestamped market prices from Home Assistant automations'},
+      tariffs:{label:'Tariffs',icon:'mdi:cash-multiple',section:'finance',renderer:'tariffsPage',note:'Fixed and time-of-use import/export tariff configuration'},
       intelligence:{label:'Forecast',icon:'mdi:weather-partly-cloudy',section:'energy',renderer:'intelligencePage',note:'Solar, battery and demand outlook'},
       planning_today:{alias:'energy_plan'},
       planning_battery:{alias:'energy_plan'},
@@ -1184,13 +1195,13 @@ class AionEmsEnergyFlowDashboard extends HTMLElement {
       planning_optimization:{label:'Optimization',icon:'mdi:target',section:'planning',renderer:'planningOptimizationPage',note:'Ranked recommendation-only energy opportunities'},
       planning_insights:{label:'Insights',icon:'mdi:lightbulb-alert-outline',section:'planning',renderer:'planningInsightsPage',note:'Executive briefing, anomalies and meaningful trends'},
       energy_intelligence:{label:'Statistics',icon:'mdi:chart-timeline-variant',section:'statistics',renderer:'energyIntelligencePage',note:'Live explanations and measured decisions'},
-      weather_statistics:{label:'Weather',icon:'mdi:weather-cloudy-clock',section:'statistics',renderer:'weatherStatisticsPage',note:'Historical weather, solar correlations and forecast accuracy'},
+      weather_statistics:{label:'Analytics',icon:'mdi:weather-cloudy-clock',section:'weather',renderer:'weatherStatisticsPage',note:'Historical weather, solar correlations and forecast accuracy'},
       finance_summary:{alias:'finance'},
       intelligence_center:{label:'Forecast',icon:'mdi:head-cog-outline',section:'energy',renderer:'intelligenceCenterPage',note:'Today’s conclusions, warnings and recommended next actions'},
       hyper_analytics:{label:'Analytics',icon:'mdi:chart-box-outline',section:'energy',renderer:'hyperAnalyticsPage',note:'Measured trends, comparisons, correlations and rankings'},
       battery_intelligence:{alias:'finance'},
-      energy_flow_intelligence:{label:'Energy Flow',icon:'mdi:transit-connection-variant',section:'energy',renderer:'energyFlowIntelligencePage',note:'DEA-powered source attribution, rankings and energy story'},
-      statistics_hub:{label:'Statistics',icon:'mdi:chart-box-outline',section:'top',renderer:'statisticsHubPage',note:'Measured statistics and advanced analytics in one place'},
+      energy_flow_intelligence:{label:'Flow',icon:'mdi:transit-connection-variant',section:'energy',renderer:'energyFlowIntelligencePage',note:'DEA-powered source attribution, rankings and energy story'},
+      statistics_hub:{alias:'solar_statistics'},
       device_intelligence:{label:'Device Intelligence',icon:'mdi:dna',section:'statistics',renderer:'deviceIntelligencePage',note:'Trend-aware device health, recovery tracking, diagnostics and Energy DNA'},
       energy_finance:{alias:'finance'},
       mission_memory:{label:'Memory',icon:'mdi:brain',section:'statistics',renderer:'memoryLearningPage',note:'Learned routines, recurring patterns and detected changes'},
@@ -1204,12 +1215,12 @@ class AionEmsEnergyFlowDashboard extends HTMLElement {
       discovery:{label:'Plugins',icon:'mdi:puzzle-plus-outline',section:'system',renderer:'integrationsPage',note:'Discover and review supported plugins'},
       rooms_groups:{label:'Rooms and Groups',icon:'mdi:floor-plan',section:'system',renderer:'roomsPage',note:'Organize the physical home'},
       sources:{label:'Energy Sources',icon:'mdi:database-cog-outline',section:'system',renderer:'sourcesPage',note:'Trusted power and energy mappings'},
-      weather_setup:{label:'Weather Sources',icon:'mdi:weather-partly-cloudy',section:'system',renderer:'weatherSetupPage',note:'Regional forecast source and on-site weather station mappings'},
+      weather_setup:{label:'Sources',icon:'mdi:weather-partly-cloudy',section:'weather',renderer:'weatherSetupPage',note:'Regional forecast source and on-site weather station mappings'},
       diagnostics:{label:'Diagnostics',icon:'mdi:stethoscope',section:'system',renderer:'diagnosticsCenterPage',note:'Read-only Energy Flow, Smart Control and system evidence'},
       switch_hub:{label:'Switch Hub',icon:'mdi:toggle-switch-variant',section:'system',renderer:'switchHubPage',note:'Solar-surplus and time control for Home Assistant switches'},
       home:{alias:'daily_report'},home_overview:{alias:'daily_report'},
       energy:{alias:'energy_flow_intelligence'},flow:{alias:'energy_flow_intelligence'},topology:{alias:'energy_flow_intelligence'},
-      smart_meter:{alias:'grid'},tariffs:{alias:'finance'},forecast:{alias:'intelligence'},analytics:{alias:'statistics_hub'},statistics:{alias:'statistics_hub'},
+      smart_meter:{alias:'grid'},tariff_settings:{alias:'tariffs'},forecast:{alias:'intelligence'},analytics:{alias:'statistics_hub'},statistics:{alias:'statistics_hub'},
       planning:{alias:'energy_plan'},today_plan:{alias:'energy_plan'},scenario_planner:{alias:'energy_plan'},
       assistant:{alias:'copilot'},brain:{alias:'knowledge'},qa:{alias:'system_health'},performance:{alias:'system_health'},
       devices:{alias:'registered_devices'},rooms:{alias:'rooms_groups'},integrations:{alias:'discovery'},
@@ -1249,9 +1260,13 @@ class AionEmsEnergyFlowDashboard extends HTMLElement {
   }
 
   navigationSections(){return [
-    {id:'statistics',label:'Zeus Intelligence',icon:'mdi:brain',pages:['intelligence_center','device_intelligence','battery_statistics','mission_memory']},
-    {id:'status',label:'System',icon:'mdi:cog-outline',pages:['knowledge','health','system_health','planning_results','planning_learning','planning_behavior']},
-    {id:'system',label:'Manage',icon:'mdi:cog-outline',pages:['settings','device_manager','registered_devices','discovery','rooms_groups','sources','weather_setup','diagnostics','switch_hub']}
+    {id:'energy',label:'ENERGY',icon:'mdi:lightning-bolt-outline',pages:['energy_flow_intelligence','energy_status','energy_plan']},
+    {id:'finance',label:'FINANCE',icon:'mdi:cash-multiple',pages:['finance','dynamic_tariffs','tariffs']},
+    {id:'domain_statistics',label:'STATISTICS',icon:'mdi:chart-box-outline',pages:['solar_statistics','grid_statistics','battery_statistics','heat_pump_statistics','dhw_statistics']},
+    {id:'statistics',label:'Zeus Intelligence',icon:'mdi:brain',pages:['intelligence_center','device_intelligence','mission_memory']},
+    {id:'weather',label:'Weather',icon:'mdi:weather-partly-cloudy',pages:['weather_statistics','weather_setup']},
+    {id:'status',label:'System',icon:'mdi:cog-outline',pages:['knowledge','health','system_health','planning_learning','planning_behavior']},
+    {id:'system',label:'Manage',icon:'mdi:cog-outline',pages:['settings','device_manager','registered_devices','discovery','rooms_groups','sources','diagnostics','switch_hub']}
   ];}
   resolvePageDefinition(pageId){
     const registry=this.pageRegistry();let id=pageId||'daily_report',seen=new Set();
@@ -1531,7 +1546,7 @@ class AionEmsEnergyFlowDashboard extends HTMLElement {
     if(!this._mobileNavSection)this._mobileNavSection=activeSection;
     const group=section=>{const expanded=this._mobileNavSection===section.id;return `<div class="nav-group world-group ${section.id}-world ${expanded?'expanded':'collapsed'}" data-nav-group="${section.id}"><button type="button" class="nav-group-title" data-nav-section="${section.id}" aria-expanded="${expanded?'true':'false'}"><ha-icon icon="${section.icon}"></ha-icon><span>${section.label}</span><ha-icon class="nav-group-chevron" icon="mdi:chevron-down"></ha-icon></button><div class="nav-group-children">${section.pages.map(id=>button(id,true)).join('')}</div></div>`;};
     const kioskLauncher=showKioskLauncher?`<button type="button" data-open-command-center class="nav-child nav-kiosk-launch" aria-label="Open Kiosk"><ha-icon icon="mdi:monitor-dashboard"></ha-icon><span>Kiosk</span></button>`:'';
-    return `<nav aria-label="Zeus navigation"><div class="mobile-nav-search"><ha-icon icon="mdi:magnify"></ha-icon><input type="search" id="mobile-nav-search-input" placeholder="Go to page..." value="${this.esc(this._mobileNavQuery||'')}" aria-label="Search Zeus pages"></div><div class="nav-section welcome-section">${button('daily_report',true)}${button('executive_overview',true)}${button('briefing',true)}${button('energy_flow_intelligence',true)}${button('statistics_hub',true)}${button('finance',true)}${button('dynamic_tariffs',true)}${button('energy_status',true)}${button('energy_plan',true)}${button('weather_statistics',true)}${button('copilot',true)}${kioskLauncher}</div><div class="nav-section">${this.navigationSections().map(group).join('')}</div><div class="sidebar-exit-wrap"><button type="button" class="sidebar-exit-button" data-exit-zeus aria-label="Exit Zeus and return to Home Assistant"><ha-icon icon="mdi:exit-to-app"></ha-icon><span>Exit to Home Assistant</span></button></div></nav>`;
+    return `<nav aria-label="Zeus navigation"><div class="mobile-nav-search"><ha-icon icon="mdi:magnify"></ha-icon><input type="search" id="mobile-nav-search-input" placeholder="Go to page..." value="${this.esc(this._mobileNavQuery||'')}" aria-label="Search Zeus pages"></div><div class="nav-section welcome-section">${button('daily_report',true)}${button('executive_overview',true)}${button('briefing',true)}${button('copilot',true)}${kioskLauncher}</div><div class="nav-section">${this.navigationSections().map(group).join('')}</div><div class="sidebar-exit-wrap"><button type="button" class="sidebar-exit-button" data-exit-zeus aria-label="Exit Zeus and return to Home Assistant"><ha-icon icon="mdi:exit-to-app"></ha-icon><span>Exit to Home Assistant</span></button></div></nav>`;
   }
   zeusSearchPanel(){const results=this._navSearchResults||'';return `<div class="zeus-global-search ask-zeus-search"><ha-icon icon="mdi:magnify"></ha-icon><input id="zeus-global-search" type="search" autocomplete="off" placeholder="Find a page, device or setting…" aria-label="Find pages, devices and settings"><button type="button" id="clear-global-search" aria-label="Clear search"><ha-icon icon="mdi:close"></ha-icon></button><div class="zeus-search-results" id="zeus-search-results">${results}</div></div>`;}
   dynamicTariffsPage(){
@@ -1649,7 +1664,7 @@ class AionEmsEnergyFlowDashboard extends HTMLElement {
       .ov-action h2{font-size:22px;margin:7px 0}.ov-action p{color:var(--muted);line-height:1.55}.ov-action-meta{display:flex;gap:8px;flex-wrap:wrap;margin-top:14px}.ov-chip{font-size:10px;border:1px solid var(--line);border-radius:999px;padding:6px 9px;color:var(--muted)}
       .ov-today{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:11px;margin-bottom:15px}.ov-kpi{display:flex;align-items:center;gap:11px;border:1px solid var(--line);border-radius:15px;background:var(--surface);padding:14px}.ov-kpi ha-icon{color:var(--accent2)}.ov-kpi span,.ov-kpi small{display:block;color:var(--muted);font-size:10px}.ov-kpi b{display:block;font-size:19px;margin:3px 0}
       .ov-info-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:15px}.ov-info-grid>.panel{margin:0!important}.ov-signals{display:grid;grid-template-columns:1fr 1fr;gap:9px;margin-top:12px}.ov-signal{padding:11px;border-radius:12px;background:var(--surface2)}.ov-signal span,.ov-signal small{display:block;color:var(--muted);font-size:10px}.ov-signal b{display:block;margin:4px 0;font-size:14px}.ov-load{display:flex;justify-content:space-between;gap:12px;padding:9px 0;border-bottom:1px solid var(--line)}.ov-load:last-child{border-bottom:0}.ov-load span{color:var(--muted)}.ov-empty{padding:10px 0;color:var(--muted)}
-      
+
       @media(max-width:1000px){.ov-main-grid,.ov-info-grid{grid-template-columns:1fr}.ov-flow.ov-flow-four{grid-template-columns:repeat(2,minmax(0,1fr))}.ov-today{grid-template-columns:repeat(2,minmax(0,1fr))}}@media(max-width:620px){.ov-head{display:block}.ov-status{display:inline-block;margin-top:12px}.ov-flow,.ov-flow.ov-flow-four{grid-template-columns:1fr}.ov-flow-arrow{transform:rotate(90deg);justify-self:center}.ov-today,.ov-signals{grid-template-columns:1fr}}
     </style>
       <div class="ov-head"><div><span class="ov-kicker">OVERVIEW</span><h1>Your energy system at a glance</h1><p>What is happening now, what happened today, and what matters next.</p></div><div class="ov-status">${this.esc(status)}</div></div>
@@ -1818,8 +1833,7 @@ class AionEmsEnergyFlowDashboard extends HTMLElement {
     const deviceCount=registry.device_count??(Array.isArray(registry.devices)?registry.devices.length:0),roomCount=registry.room_count??(Array.isArray(registry.rooms)?registry.rooms.length:0),groupCount=registry.group_count??(Array.isArray(registry.groups)?registry.groups.length:0),discovered=hub.discovered_candidate_count??0;
     const card=(page,icon,eyebrow,title,description,meta='')=>`<button type="button" data-page="${page}" class="config-card"><span class="config-icon"><ha-icon icon="${icon}"></ha-icon></span><span class="config-copy"><small>${eyebrow}</small><b>${title}</b><em>${description}</em>${meta?`<strong>${meta}</strong>`:''}</span><ha-icon class="config-arrow" icon="mdi:chevron-right"></ha-icon></button>`;
     const currency=this._tariffDraft?.currency??finance.currency??'CHF',importTariff=this._tariffDraft?.import_tariff??finance.import_tariff??'',exportTariff=this._tariffDraft?.export_tariff??finance.export_tariff??'';
-    return `<section class="page configuration-center"><div class="page-head"><div><span>CONFIGURATION</span><h1>Configuration</h1><p>Manage mappings, devices, organization, tariffs and display preferences.</p></div><button id="open-wizard" class="primary-button"><ha-icon icon="mdi:wand"></ha-icon> Setup wizard</button></div>
-      ${this.tariffEditorPanel()}
+    return `<section class="page configuration-center"><div class="page-head"><div><span>CONFIGURATION</span><h1>Configuration</h1><p>Manage mappings, devices, organization and display preferences.</p></div><button id="open-wizard" class="primary-button"><ha-icon icon="mdi:wand"></ha-icon> Setup wizard</button></div>
       <div class="configuration-status"><article><span>Registered devices</span><b>${this.esc(deviceCount)}</b><small>${this.esc(roomCount)} rooms · ${this.esc(groupCount)} groups</small></article><article><span>Discovery candidates</span><b>${this.esc(discovered)}</b><small>${this.esc(hub.enabled_plugin_count??0)} plugins enabled</small></article><article><span>Tariffs</span><b>${this.esc(currency)}</b><small>Import ${this.esc(importTariff||'—')} · Export ${this.esc(exportTariff||'—')}</small></article><article><span>Safety mode</span><b>${this.esc(control.mode==='recommendation_only'?'Recommendation Only':control.mode||'Recommendation Only')}</b><small>${control.fail_closed===false?'Review safety state':'Fail-closed · no autonomous device control'}</small></article></div>
       <div class="configuration-section"><div class="section-title"><div><span>CORE CONFIGURATION</span><h2>Home and energy setup</h2></div></div><div class="configuration-grid">${card('sources','mdi:database-cog-outline','ENTITY MAPPING','Energy Sources','Configure trusted power, energy, battery and weather entities.')}${card('devices','mdi:devices','DEVICE REGISTRY','Registered Devices','Review all registered loads and their measurements.',`${deviceCount} registered`)}${card('device_manager','mdi:tune-variant','DEVICE MANAGEMENT','Device Manager','Add, edit and remove registered devices.')}${card('integrations','mdi:puzzle-outline','PLUGINS','Plugins','Discover and configure supported integrations.',`${discovered} candidates`)}${card('rooms','mdi:floor-plan','ORGANIZATION','Rooms & Groups','Organize devices by room and operational group.',`${roomCount} rooms · ${groupCount} groups`)}</div></div>
       <article class="panel spaced smart-control-foundation"><div class="section-title"><div><span>SMART CONTROL & SAFETY</span><h2>Control status</h2></div><ha-icon icon="mdi:shield-lock-outline"></ha-icon></div><p class="configuration-note">Zeus evaluates control eligibility, ownership and safety before any supervised device command is allowed.</p><div class="control-safety-summary"><article><span>CONTROL MODE</span><b>${control.supervised_control_enabled?'Supervised device control':'Recommendation only'}</b><small>Automatic control ${control.automatic_control_enabled?'enabled':'disabled'}</small></article><article><span>EXECUTION PATH</span><b>${control.execution_path==='disabled'?'Disabled':this.esc(control.execution_path||'Disabled')}</b><small>Explicit per-device safety gates</small></article><article><span>CONTROL CANDIDATES</span><b>${this.esc(control.controllable_candidates??0)}</b><small>${this.esc(control.permissioned_candidates??0)} permissioned</small></article><article><span>REGISTERED DEVICES</span><b>${this.esc(control.registered_devices??deviceCount)}</b><small>Observed independently</small></article></div><details class="control-diag-details"><summary>Registered-device control eligibility · diagnostics</summary><div class="control-device-list">${controlRows}</div></details>${(()=>{const ps=this.s('sensor.aion_ems_zeus_platform_status')?.attributes||{};const st=ps.update_status||'checking';const available=!!ps.update_available;const development=st==='development_build';const label=available?'UPDATE AVAILABLE':development?'DEVELOPMENT BUILD':st==='up_to_date'?'UP TO DATE':st==='unable_to_check'?'UNABLE TO CHECK':'CHECKING';const latest=ps.latest_version||'—';const latestPrefix=ps.latest_channel==='stable'?'Latest stable':'Latest published';const icon=available?'mdi:update':development?'mdi:flask-outline':'mdi:check-decagram-outline';return `<div class="control-update-status ${available?'update-available':development?'development-build':''}"><ha-icon icon="${icon}"></ha-icon><div><span>ZEUS UPDATE STATUS</span><b>${label}</b><small>Installed ${this.esc(ps.version||'—')}${latest!=='—'?` · ${latestPrefix} ${this.esc(latest)}`:''}${development?' · Development build is newer than the latest stable release.':''}${st==='unable_to_check'?' · Zeus will retry automatically.':''}</small></div>${available?'<strong>NEW VERSION</strong>':development?'<strong>DEV</strong>':''}</div>`})()}<div class="control-simulator"><div class="section-title"><div><span>DECISION ENGINE</span><h3>Live control decision</h3></div><ha-icon icon="mdi:calculator-variant-outline"></ha-icon></div><p class="configuration-note">Zeus mirrors the selected Water Heater profile: solar threshold, export factor, maximum power and element-temperature taper are read from editable device settings. Boiler/DHW temperature controls lockout hysteresis and the separate 50–55 °C GRID BACKUP comfort band; element temperature alone controls taper. SOLAR always has priority. The decision view explains the live control result; supervised execution remains subject to ownership, readiness and master-enable safety gates.</p><div class="control-sim-list">${controlSimulationRows}</div><div class="control-history-head"><div><span>SIMULATION HISTORY</span><h3>Meaningful transitions</h3></div><small>${this.esc(control.simulation_history_count??controlHistory.length)} captured this runtime</small></div><div class="control-history-list">${controlHistoryRows}</div></div><div class="control-foundation-warning"><ha-icon icon="mdi:shield-check-outline"></ha-icon><div><b>Supervised execution safety is active in ${this.esc(this.s('sensor.aion_ems_zeus_platform_status')?.attributes?.version||'this build')}.</b><small>Commands are allowed only for explicitly enabled devices while ownership, readiness, arm and master-execution gates remain satisfied.</small></div></div></article>
@@ -2673,7 +2687,7 @@ class AionEmsEnergyFlowDashboard extends HTMLElement {
         <article class="panel"><div class="section-title"><div><span>OUTLOOK</span><h2>Forecast & strategy</h2></div><ha-icon icon="mdi:weather-partly-cloudy"></ha-icon></div><div class="outlook-cards"><div><span>Next 24h solar</span><b>${this.kwh(next24Solar)}</b><small>${this.esc(forecastRangeLabel)}</small></div><div><span>Next 24h demand</span><b>${this.kwh(next24Demand)}</b><small>${forecastConfidence.toFixed(0)}% model confidence</small></div><div><span>Best energy window</span><b>${this.esc(bestForecastWindowLabel||'Collecting')}</b><small>${bestForecastWindowKwh>0?this.esc(`${this.kwh(bestForecastWindowKwh)} surplus`):'Evidence still maturing'}</small></div><div><span>Weather</span><b>${this.esc(weather.condition||weather.summary||'Collecting')}</b></div></div><p class="outlook-note">${this.esc(bestForecastWindowLabel?`Next strong flexible-load opportunity is ${bestForecastWindowLabel}${bestForecastWindowKwh>0?`, with ${this.kwh(bestForecastWindowKwh)} predicted surplus`:''}. Recommendation only.`:'Zeus is collecting forecast evidence for the next flexible-load opportunity.')}</p></article>
       </div>
       <article class="panel ai-executive-summary"><div><span>AI EXECUTIVE SUMMARY</span><h2>${this.esc(rec.title||'Energy performance is being evaluated')}</h2><p>${this.esc(rec.reason||briefing.briefing||'More measured history will improve the report.')}</p></div><div class="executive-score"><small>Overall grade</small><strong>${grade}</strong><span>${confidence.toFixed(0)}% confidence</span></div></article>
-      
+
     </section>`;
   }
   dashboardBuilderPage(){const layout=this.dashboardLayout(),catalog=this.dashboardCatalog(),scope=this._dashboardScope;const rows=layout.order.map(id=>catalog.find(x=>x.id===id)).filter(Boolean).concat(catalog.filter(x=>!layout.order.includes(x)));return `<section class="page dashboard-builder-page"><div class="page-head"><div><span>DASHBOARD BUILDER 10.27.3</span><h1>Custom Dashboard Builder</h1><p>Reorder and show or hide Analytics and Executive Report cards. Layouts are stored locally in this browser.</p></div><div class="badge">${this.esc(scope)} layout · ${this.esc(layout.name||'Custom')}</div></div><article class="panel spaced"><div class="section-title"><div><span>LAYOUT SCOPE</span><h2>Device-specific layout</h2></div></div><div class="builder-scope"><button data-layout-scope="desktop" class="${scope==='desktop'?'selected':''}">Desktop / tablet</button><button data-layout-scope="mobile" class="${scope==='mobile'?'selected':''}">Mobile</button></div><div class="preset-row">${['homeowner','solar','battery','finance','technical','wall'].map(x=>`<button data-layout-preset="${x}">${x[0].toUpperCase()+x.slice(1)}</button>`).join('')}</div></article><article class="panel spaced"><div class="section-title"><div><span>CARD ORDER</span><h2>Drag cards into position</h2></div><small>Changes save immediately</small></div><div id="dashboard-card-list" class="dashboard-card-list">${rows.map((x,i)=>`<div class="dashboard-card-row" draggable="true" data-layout-card="${x.id}"><ha-icon icon="mdi:drag-vertical"></ha-icon><div><b>${this.esc(x.label)}</b><small>${x.page==='analytics'?'Analytics':'Executive Reports'}</small></div><label><input type="checkbox" data-layout-visible="${x.id}" ${layout.hidden.includes(x.id)?'':'checked'}> Visible</label><button data-layout-up="${x.id}" title="Move up">↑</button><button data-layout-down="${x.id}" title="Move down">↓</button></div>`).join('')}</div></article><article class="panel spaced"><div class="section-title"><div><span>EXPORTS & BACKUP</span><h2>Share and restore</h2></div></div><div class="builder-actions"><button id="export-chart-png"><ha-icon icon="mdi:file-image-outline"></ha-icon> Export current chart PNG</button><button id="print-dashboard-pdf"><ha-icon icon="mdi:file-pdf-box"></ha-icon> Print / Save PDF</button><button id="backup-dashboard-layout"><ha-icon icon="mdi:download"></ha-icon> Backup layouts</button><label class="file-button"><ha-icon icon="mdi:upload"></ha-icon> Restore layouts<input id="restore-dashboard-layout" type="file" accept="application/json"></label><button id="reset-dashboard-layout"><ha-icon icon="mdi:restore"></ha-icon> Reset current layout</button></div><p class="muted-note">PNG exports the first visible chart on the current page. PDF uses the browser print dialog, where you can choose “Save as PDF”.</p></article><article class="panel safety-note"><b>Recommendation-only mode</b><p>Dashboard customization and exports never control devices, batteries, chargers or inverters.</p></article></section>`;}
@@ -2726,7 +2740,7 @@ class AionEmsEnergyFlowDashboard extends HTMLElement {
   commandCenterPage(){
     const n=(v,d=0)=>{const x=Number(v);return Number.isFinite(x)?x:d;};
     const today=this.periodData('today')||{}, quality=this.s('sensor.aion_ems_zeus_data_quality')?.attributes||{}, health=this.s('sensor.aion_ems_zeus_system_health')?.attributes||{}, forecast=this.s('sensor.aion_ems_zeus_forecast')?.attributes||{}, accuracy=this.s('sensor.aion_ems_zeus_prediction_accuracy')?.attributes||{}, learning=this.s('sensor.aion_ems_zeus_learning_intelligence')?.attributes||this.s('sensor.aion_ems_zeus_learning_preview')?.attributes||{}, weather=this.s('sensor.aion_ems_zeus_weather_context')?.attributes||{}, efficiency=this.s('sensor.aion_ems_zeus_home_efficiency')?.attributes||{}, seasonal=this.s('sensor.aion_ems_zeus_seasonal_analysis','sensor.aion_ems_zeus_energy_topology')?.attributes||{}, predictiveBattery=this.s('sensor.aion_ems_zeus_predictive_battery')?.attributes||{}, finance=this.s('sensor.aion_ems_zeus_finance_summary')?.attributes||{}, now=new Date();
-    const zeusVersion=String(this.s('sensor.aion_ems_zeus_platform_status')?.attributes?.version||'15.0.54').replace(/^v/i,'');
+    const zeusVersion=String(this.s('sensor.aion_ems_zeus_platform_status')?.attributes?.version||'15.0.66').replace(/^v/i,'');
     const control=this.s('sensor.aion_ems_zeus_smart_control_safety')?.attributes||{};
     const solar=Math.max(0,n(this.value('sensor.aion_ems_zeus_solar_power'))),home=Math.max(0,n(this.value('sensor.aion_ems_zeus_house_power'))),imp=Math.max(0,n(this.value('sensor.aion_ems_zeus_grid_import_power'))),exp=Math.max(0,n(this.value('sensor.aion_ems_zeus_grid_export_power'))),ch=Math.max(0,n(this.value('sensor.aion_ems_zeus_battery_charge_power'))),dis=Math.max(0,n(this.value('sensor.aion_ems_zeus_battery_discharge_power')));
     const isLoadDevice=d=>{if(d?.hybrid_inverter===true)return false;const text=[d?.type,d?.category,d?.role,d?.device_class,d?.name,d?.manufacturer,d?.model].filter(Boolean).join(' ').toLowerCase();const sourceTypes=['solar','photovoltaic','pv','inverter','fronius symo','fronius hybrid','battery inverter','smart meter','grid meter','energy meter','power meter','meter'];return !sourceTypes.some(x=>text.includes(x));};
@@ -3108,7 +3122,7 @@ class AionEmsEnergyFlowDashboard extends HTMLElement {
     const control=this.s('sensor.aion_ems_zeus_smart_control_safety')?.attributes||{};
     const qa=this.s('sensor.aion_ems_zeus_qa_diagnostics')?.attributes||{};
     const perf=this.s('sensor.aion_ems_zeus_performance_diagnostics')?.attributes||{};
-    const version=String(platform.version||'15.0.54').replace(/^v/i,'');
+    const version=String(platform.version||'15.0.66').replace(/^v/i,'');
     const source=flow.source_snapshot&&typeof flow.source_snapshot==='object'?flow.source_snapshot:{};
     const sourceKeys=['solar_power','grid_import_power','grid_export_power','battery_charge_power','battery_discharge_power','grid_power','battery_power'];
     const sources={};
@@ -3118,7 +3132,7 @@ class AionEmsEnergyFlowDashboard extends HTMLElement {
     const simulations=(Array.isArray(control.simulations)?control.simulations:[]).map(x=>({device_id:x.device_id||null,allowed:x.allowed,reason:x.reason||null,requested_power_w:x.requested_power_w??null,live:x.live?{surplus_w:x.live.surplus_w??null,boiler_temperature_c:x.live.boiler_temperature_c??null,element_temperature_c:x.live.element_temperature_c??null}:null,execution:x.execution?{status:x.execution.status||null,active:x.execution.active,last_value_w:x.execution.last_value_w??null,last_write_at:x.execution.last_write_at||null,last_error:x.execution.last_error||null,interlocks:Array.isArray(x.execution.interlocks)?x.execution.interlocks:[]}:null}));
     const goe=(((control.goe_mqtt||{}).devices)||[]).map(x=>({device_id:x.device_id||null,active:!!x.active,topic:x.topic||null,grid_power_entity:x.grid_power_entity||null,last_publish_at:x.last_publish_at||null,last_error:x.last_error||null}));
     const checks=Array.isArray(qa.checks)?qa.checks.slice(0,50).map(x=>({category:x.category||x.area||null,name:x.name||x.check||x.title||null,status:x.status||x.result||null,message:x.message||x.detail||null})):[];
-    const report={report_schema:'aion_ems_zeus_diagnostic_report_v1',generated_at:new Date().toISOString(),privacy:'No credentials, passwords, access tokens, MQTT credentials, NAS server addresses or secret connection data are included.',system:{zeus_version:version,frontend_version:'15.0.54',registered_devices:devices.length,performance:perf.status||perf.mode||null,recorder_attribute_limit_bytes:16384,energy_flow_recorder_protected:true},energy_flow:{status:flowRoot.status||flowState?.state||null,snapshot_completed:flow.snapshot_completed||flow.flow_snapshot_completed||flow.snapshot_timestamp||flow.last_updated||null,update_latency_ms:flowRoot.update_latency_ms??flow.update_latency_ms??perf.update_latency_ms??'unavailable',source_skew_ms:flow.source_skew_ms??null,house_power_w:this.value('sensor.aion_ems_zeus_house_power'),solar_power_w:this.value('sensor.aion_ems_zeus_solar_power'),grid_import_power_w:this.value('sensor.aion_ems_zeus_grid_import_power'),grid_export_power_w:this.value('sensor.aion_ems_zeus_grid_export_power'),battery_charge_power_w:this.value('sensor.aion_ems_zeus_battery_charge_power'),battery_discharge_power_w:this.value('sensor.aion_ems_zeus_battery_discharge_power'),sources},registered_devices:devices,smart_control:{execution_path:control.execution_path||null,registered_devices:control.registered_devices??devices.length,controllable_candidates:control.controllable_candidates??null,permissioned_candidates:control.permissioned_candidates??null,devices:focused,simulations,goe_mqtt:goe},self_test:{status:qa.status||'Not run',score:qa.score??null,grade:qa.grade||null,passed:qa.passed_count??null,warnings:qa.warning_count??null,errors:qa.error_count??null,checks}}; return this._sanitizeDiagnosticExport(report);
+    const report={report_schema:'aion_ems_zeus_diagnostic_report_v1',generated_at:new Date().toISOString(),privacy:'No credentials, passwords, access tokens, MQTT credentials, NAS server addresses or secret connection data are included.',system:{zeus_version:version,frontend_version:'15.0.66',registered_devices:devices.length,performance:perf.status||perf.mode||null,recorder_attribute_limit_bytes:16384,energy_flow_recorder_protected:true},energy_flow:{status:flowRoot.status||flowState?.state||null,snapshot_completed:flow.snapshot_completed||flow.flow_snapshot_completed||flow.snapshot_timestamp||flow.last_updated||null,update_latency_ms:flowRoot.update_latency_ms??flow.update_latency_ms??perf.update_latency_ms??'unavailable',source_skew_ms:flow.source_skew_ms??null,house_power_w:this.value('sensor.aion_ems_zeus_house_power'),solar_power_w:this.value('sensor.aion_ems_zeus_solar_power'),grid_import_power_w:this.value('sensor.aion_ems_zeus_grid_import_power'),grid_export_power_w:this.value('sensor.aion_ems_zeus_grid_export_power'),battery_charge_power_w:this.value('sensor.aion_ems_zeus_battery_charge_power'),battery_discharge_power_w:this.value('sensor.aion_ems_zeus_battery_discharge_power'),sources},registered_devices:devices,smart_control:{execution_path:control.execution_path||null,registered_devices:control.registered_devices??devices.length,controllable_candidates:control.controllable_candidates??null,permissioned_candidates:control.permissioned_candidates??null,devices:focused,simulations,goe_mqtt:goe},self_test:{status:qa.status||'Not run',score:qa.score??null,grade:qa.grade||null,passed:qa.passed_count??null,warnings:qa.warning_count??null,errors:qa.error_count??null,checks}}; return this._sanitizeDiagnosticExport(report);
   }
   _sanitizeDiagnosticExport(value){
     if(value==null) return value;
@@ -3249,7 +3263,7 @@ class AionEmsEnergyFlowDashboard extends HTMLElement {
     const platform=this.s('sensor.aion_ems_zeus_platform_status')?.attributes||{};
     const qa=this.s('sensor.aion_ems_zeus_qa_diagnostics')?.attributes||{};
     const perf=this.s('sensor.aion_ems_zeus_performance_diagnostics')?.attributes||{};
-    const version=String(platform.version||'15.0.54').replace(/^v/i,'');
+    const version=String(platform.version||'15.0.66').replace(/^v/i,'');
     const sourceSnapshot=flow.source_snapshot&&typeof flow.source_snapshot==='object'?flow.source_snapshot:{};
     const fmtTs=v=>{if(!v)return '—';try{return new Date(v).toLocaleString();}catch(_e){return String(v)}};
     const fmtVal=v=>{const n=Number(v);return Number.isFinite(n)?this.watts(n):'—';};
@@ -3517,7 +3531,7 @@ class AionEmsEnergyFlowDashboard extends HTMLElement {
   }
   advisorExplanation(ctx,a,b){const solar=Number(ctx.solar_w)||0,home=Number(ctx.home_w)||0,imp=Number(ctx.grid_import_w)||0,exp=Number(ctx.grid_export_w)||0,soc=ctx.battery_soc_percent==null?null:Number(ctx.battery_soc_percent),surplus=Math.max(0,solar-home),deficit=Math.max(0,home-solar);let headline='Zeus is monitoring the current energy balance.',text='Live energy data is available, but there is not yet a strong recommendation.',bullets=[];if(solar>home+50){headline='Solar is covering the home and creating a usable surplus.';text=`Solar production is ${this.watts(solar)}, while the home is using ${this.watts(home)}. That leaves about ${this.watts(surplus)} available for battery charging or flexible loads before exporting energy.`;bullets.push(`Solar exceeds demand by ${this.watts(surplus)}.`);if(soc!=null)bullets.push(`Battery state of charge is ${soc.toFixed(0)}%.`);if(exp>25)bullets.push(`${this.watts(exp)} is already being exported.`);else bullets.push('Grid export is currently minimal.');}else if(imp>25){headline='The home is importing because local supply is below demand.';text=`Home demand is ${this.watts(home)}, while available solar is ${this.watts(solar)}. The remaining ${this.watts(imp)} is being supplied by the grid.`;bullets.push(`Local generation is short by about ${this.watts(deficit)}.`);if(soc!=null)bullets.push(`Battery state of charge is ${soc.toFixed(0)}%.`);bullets.push('Zeus recommends delaying flexible loads when practical.');}else if(solar<25&&home>25){headline='Stored energy is supporting the home.';text=`Solar production is currently unavailable, while the home is using ${this.watts(home)}. Zeus is preserving grid independence by relying on available battery support where possible.`;if(soc!=null)bullets.push(`Battery state of charge is ${soc.toFixed(0)}%.`);bullets.push('No solar surplus is available right now.');bullets.push('Recommendation-only safety remains active.');}else{headline='The energy system is balanced.';text=`Solar is ${this.watts(solar)}, home demand is ${this.watts(home)}, and grid import is ${this.watts(imp)}. No urgent change is recommended.`;bullets.push('Current flows are within the normal operating range.');bullets.push('Zeus will surface a new recommendation when conditions change.');}return {headline,text,bullets};}
   advisorPage(){const a=this.s('sensor.aion_ems_zeus_ai_energy_advisor')?.attributes||{},b=this.s('sensor.aion_ems_zeus_predictive_battery')?.attributes||{},l=this.s('sensor.aion_ems_zeus_learning_preview')?.attributes||{},recs=Array.isArray(a.recommendations)?a.recommendations:[],qs=Array.isArray(a.questions)?a.questions:[],ctx=a.live_context||{};return `<section class="page advisor-page"><div class="page-head"><div><span>ADVISOR 3.0</span><h1>${this.esc(a.headline||'Energy Advisor')}</h1><p>${this.esc(a.explanation||'Zeus combines live energy, forecasts, scenarios, prediction accuracy and measured history.')}</p></div><div class="badge">Advice only</div></div><div class="intel-grid zeus-kpi-grid"><article class="panel intel-card"><span>EFFICIENCY</span><b>${this.esc(a.today_score??'—')}%</b><p>Transparent home score</p></article><article class="panel intel-card"><span>TOMORROW SOLAR</span><b>${this.kwh(a.forecast_tomorrow_kwh)}</b><p>Weather and history adjusted</p></article><article class="panel intel-card"><span>LEARNING</span><b>${this.esc(a.learning_confidence_percent??0)}%</b><p>${this.esc(l.seasonal_history_months??0)} seasonal month profiles</p></article><article class="panel intel-card"><span>BATTERY PLAN</span><b>${this.esc(b.recommended_reserve_percent??'—')}%</b><p>${this.esc(b.strategy||'Collecting')}</p></article></div><article class="panel spaced"><div class="section-title"><div><span>LIVE EXPLANATION</span><h2>Why Zeus recommends this</h2></div><ha-icon icon="mdi:lightbulb-on-outline"></ha-icon></div>${(()=>{const why=this.advisorExplanation(ctx,a,b);return `<div class="advisor-explanation"><h3>${this.esc(why.headline)}</h3><p>${this.esc(why.text)}</p><ul>${why.bullets.map(x=>`<li>${this.esc(x)}</li>`).join('')}</ul></div>`;})()}<div class="supporting-data-title">Supporting live data</div><div class="today-grid"><div><span>Solar</span><b>${this.watts(ctx.solar_w)}</b></div><div><span>Home</span><b>${this.watts(ctx.home_w)}</b></div><div><span>Grid import</span><b>${this.watts(ctx.grid_import_w)}</b></div><div><span>Grid export</span><b>${this.watts(ctx.grid_export_w)}</b></div><div><span>Battery SOC</span><b>${ctx.battery_soc_percent==null?'—':this.esc(ctx.battery_soc_percent)+'%'}</b></div></div></article><article class="panel spaced advisor-opportunities-panel"><div class="section-title"><div><span>ADVISOR INTELLIGENCE V1</span><h2>Today's opportunities</h2></div><ha-icon icon="mdi:target-account"></ha-icon></div><p class="advisor-opportunities-intro">Prioritized recommendation-only actions, scored by expected impact, confidence and timing.</p>${recs.length?`<div class="advisor-opportunity-grid">${recs.slice(0,6).map((r,index)=>{const target=r.device_name||r.target||r.friendly_name||'';const action=r.action||'';const generic=/^(run now|consider now|delay|hold)$/i.test(String(r.title||''));const title=(!generic&&r.title)?r.title:(target?`${action||'Recommendation'} — ${target}`:'Energy opportunity');const confidenceRaw=Number(r.confidence_percent??r.confidence);const confidence=Number.isFinite(confidenceRaw)?Math.max(0,Math.min(100,confidenceRaw)):null;const window=this.displayWindow(r.best_window||r.window||r.execution_window);const benefit=r.expected_benefit||r.benefit||r.expected_gain||'Evaluating';const energyBenefit=r.expected_energy_benefit_kwh??r.energy_benefit_kwh??r.expected_gain_kwh;const savings=r.expected_savings_chf??r.savings_chf??r.financial_benefit_chf;const priority=String(r.priority||r.urgency||'Normal');const impact=/high|critical|urgent/i.test(priority)?'High':(/low/i.test(priority)?'Low':'Medium');const historical=r.historical_context||r.similar_day_context||r.seasonal_context||'';return `<div class="advisor-opportunity-card impact-${impact.toLowerCase()}"><div class="advisor-opportunity-head"><span class="advisor-rank">${index+1}</span><div><b>${this.esc(title)}</b>${target?`<small>${this.esc(target)}</small>`:''}</div><em>${impact} impact</em></div><p>${this.esc(r.reason||r.why_now||'Zeus identified this as the strongest verified opportunity.')}</p>${historical?`<p class="advisor3-context">${this.esc(historical)}</p>`:''}<div class="advisor-score-grid"><div><span>Window</span><b>${this.esc(window)}</b></div><div><span>Confidence</span><b>${confidence==null?'Learning':confidence.toFixed(0)+'%'}</b></div><div><span>Energy</span><b>${energyBenefit==null?'—':Number(energyBenefit).toFixed(2)+' kWh'}</b></div><div><span>Savings</span><b>${savings==null?this.esc(benefit):'CHF '+Number(savings).toFixed(2)}</b></div></div><small class="advisor-only-note">Recommendation only · Zeus never executes this action automatically.</small></div>`;}).join('')}</div>`:'<div class="advisor-balanced-state"><ha-icon icon="mdi:check-decagram-outline"></ha-icon><div><b>No action required</b><p>The energy system is balanced. Zeus will surface a scored opportunity when one is supported by live and historical evidence.</p></div></div>'}</article><article class="panel spaced"><div class="section-title"><div><span>PREDICTIVE BATTERY</span><h2>${this.esc(b.strategy||'Collecting')}</h2></div><b>${this.esc(b.recommended_reserve_percent??'—')}% reserve</b></div><p>${this.esc(b.reason||'Battery context is being evaluated.')}</p><div class="today-grid zeus-kpi-grid predictive-kpi-grid"><div><span>Tomorrow forecast</span><b>${this.kwh(b.forecast_tomorrow_kwh)}</b></div><div><span>Learned daily demand</span><b>${this.kwh(b.learned_home_day_kwh)}</b></div><div><span>Forecast / demand</span><b>${this.esc(b.forecast_to_demand_ratio??'—')}×</b></div><div><span>Recommended action</span><b>${this.esc(b.recommended_action||'Monitor')}</b></div></div></article><article class="panel spaced"><div class="section-title"><div><span>ASK ZEUS</span><h2>Common energy questions</h2></div></div><div class="report-card-grid">${qs.map(q=>`<div><b>${this.esc(q.question)}</b><p>${this.esc(this.humanizeAnswer(q.answer))}</p></div>`).join('')}</div></article></section>`;}
-  
+
   resolveCopilotFollowup(previousQuestion,rawQuestion){
     const currentText=String(rawQuestion||'').toLowerCase();
     const explicitNewTopic=/\b(whole\s*home|opportunity|ranking|profile\s*maturity|evidence\s*profile|what\s*has\s*zeus\s*learned|recommendation\s+outcome|outcome\s+history|adaptive\s+(?:recommendation\s+)?confidence|confidence\s+changed|why\s*#?1|why\s*number\s*1)\b/.test(currentText);
@@ -5248,6 +5262,26 @@ class AionEmsEnergyFlowDashboard extends HTMLElement {
 
   gridStatisticsPage(){return this.smartMeterPage();}
 
+  solarStatisticsPage(){
+    return this.solarPage();
+  }
+
+  gridDomainStatisticsPage(){
+    return this.smartMeterPage();
+  }
+
+  heatPumpDomainStatisticsPage(){
+    const content=this.heatPumpStatisticsPanel();
+    if(content)return content;
+    return `<section class="page"><div class="page-head"><div><span>STATISTICS · HEAT PUMP</span><h1>Heat Pump</h1><p>Measured Heat Pump statistics from registered Home Assistant evidence.</p></div></div><article class="panel"><div class="empty">No registered Heat Pump statistics are available yet.</div></article></section>`;
+  }
+
+  dhwDomainStatisticsPage(){
+    const content=this.dhwStatisticsPanel();
+    if(content)return content;
+    return `<section class="page"><div class="page-head"><div><span>STATISTICS · DHW</span><h1>DHW</h1><p>Measured domestic hot-water statistics from registered Home Assistant evidence.</p></div></div><article class="panel"><div class="empty">No registered DHW statistics are available yet.</div></article></section>`;
+  }
+
   intelligenceCenterPage(){return this.intelligencePage();}
 
   batteryStatisticsPage(){
@@ -5502,103 +5536,112 @@ class AionEmsEnergyFlowDashboard extends HTMLElement {
 
   dhwStatisticsPanel(){
     this.ensureDEAData();
-    const isDhwDevice=d=>{
-      const text=[d?.type,d?.category,d?.role,d?.name,d?.friendly_name].filter(Boolean).join(' ').toLowerCase().replaceAll('_',' ');
-      return text.includes('dhw')||text.includes('water heater')||text.includes('hot water')||text.includes('boiler')||text.includes('elwa');
-    };
-    const isHeatPumpDevice=d=>{
-      const text=[d?.type,d?.category,d?.role,d?.name,d?.friendly_name].filter(Boolean).join(' ').toLowerCase().replaceAll('_',' ');
-      return text.includes('heat pump')||text.includes('heatpump');
-    };
+    const norm=d=>[d?.type,d?.category,d?.role,d?.name,d?.friendly_name].filter(Boolean).join(' ').toLowerCase().replaceAll('_',' ');
+    const isHeatPump=d=>{const x=norm(d);return x.includes('heat pump')||x.includes('heatpump');};
+    const isStandaloneDhw=d=>{const x=norm(d);return !isHeatPump(d)&&(x.includes('dhw')||x.includes('water heater')||x.includes('hot water')||x.includes('boiler')||x.includes('elwa'));};
     const all=this.deviceData();
-    const standalone=all.filter(isDhwDevice);
-    const heatPumpDhw=all.filter(isHeatPumpDevice).filter(d=>String(d?.dhw_energy_entity||'').trim());
-    // Standalone DHW devices are authoritative when present. If none exists,
-    // fall back to the Heat Pump's explicitly mapped DHW thermal-energy meter.
-    const useHeatPumpFallback=!standalone.length&&heatPumpDhw.length>0;
-    const dhw=standalone.length?standalone:heatPumpDhw;
-    if(!dhw.length)return '';
+    const standalone=all.filter(isStandaloneDhw);
 
-    const recorder=useHeatPumpFallback
-      ?dhw.filter(d=>String(d?.dhw_energy_method||'').toLowerCase()==='ha_recorder_daily_statistics')
-      :dhw.filter(d=>String(d?.method||'').toLowerCase()==='ha_recorder_daily_statistics');
-    const hpKey={energy_today_kwh:'dhw_energy_today_kwh',energy_week_kwh:'dhw_energy_week_kwh',energy_month_kwh:'dhw_energy_month_kwh',energy_year_kwh:'dhw_energy_year_kwh'};
-    const sum=key=>{
-      if(!recorder.length)return null;
-      let value=0,found=false;
-      for(const d of recorder){
-        const n=Number(d?.[useHeatPumpFallback?hpKey[key]:key]);
-        if(Number.isFinite(n)){value+=Math.max(0,n);found=true;}
-      }
-      return found?value:null;
+    // Heat Pump DHW authority: reuse the already-working compact Heat Pump
+    // Intelligence evidence. This includes the explicit v2 DHW electrical /
+    // thermal circuit mappings and Recorder-backed period deltas, so the DHW
+    // page does not require or invent a second mapping.
+    const hpCompact=this.s('sensor.aion_ems_zeus_heat_pump_intelligence')?.attributes||{};
+    const hpCompactDevices=Array.isArray(hpCompact.devices)?hpCompact.devices:[];
+    const heatPumpDhw=hpCompactDevices.filter(d=>
+      d?.dhw_thermal_energy_configured===true ||
+      d?.dhw_electrical_energy_configured===true ||
+      d?.dhw_thermal_power_configured===true ||
+      d?.dhw_electrical_power_configured===true ||
+      Number.isFinite(Number(d?.dhw_thermal_energy_today_kwh)) ||
+      Number.isFinite(Number(d?.dhw_electrical_energy_today_kwh))
+    );
+
+    if(!standalone.length&&!heatPumpDhw.length)return '';
+
+    const standaloneRecorder=standalone.filter(d=>String(d?.method||'').toLowerCase()==='ha_recorder_daily_statistics');
+    const heatPumpThermalRecorder=heatPumpDhw.filter(d=>String(d?.dhw_thermal_energy_method||'').startsWith('ha_recorder'));
+    const heatPumpElectricalRecorder=heatPumpDhw.filter(d=>String(d?.dhw_electrical_energy_method||'').startsWith('ha_recorder'));
+
+    const hpKey={
+      energy_today_kwh:'dhw_thermal_energy_today_kwh',
+      energy_week_kwh:'dhw_thermal_energy_week_kwh',
+      energy_month_kwh:'dhw_thermal_energy_month_kwh',
+      energy_year_kwh:'dhw_thermal_energy_year_kwh'
     };
-    const rows=[
-      ['Today','energy_today_kwh','mdi:water-boiler'],
-      ['This week','energy_week_kwh','mdi:calendar-week-outline'],
-      ['This month','energy_month_kwh','mdi:calendar-month-outline'],
-      ['This year','energy_year_kwh','mdi:calendar-outline']
-    ];
-    const evidence=useHeatPumpFallback
-      ?(!recorder.length
-        ?'Heat Pump DHW energy is mapped, but Home Assistant Recorder-backed period statistics are not currently available. Zeus will not estimate these totals.'
-        :`Home Assistant Recorder · Heat Pump DHW thermal energy fallback${recorder.length>1?` · ${recorder.length} mapped Heat Pump DHW sources`:''}.`)
-      :(!recorder.length
-        ?'The registered DHW device does not currently expose Home Assistant Recorder-backed daily statistics. Zeus will not estimate these period totals.'
-        :recorder.length<dhw.length
-          ?`${recorder.length} of ${dhw.length} registered DHW devices have Home Assistant Recorder-backed statistics. Only those measured sources are included.`
-          :'Home Assistant Recorder · real mapped DHW energy only.');
+    const hpElectricalKey={
+      energy_today_kwh:'dhw_electrical_energy_today_kwh',
+      energy_week_kwh:'dhw_electrical_energy_week_kwh',
+      energy_month_kwh:'dhw_electrical_energy_month_kwh',
+      energy_year_kwh:'dhw_electrical_energy_year_kwh'
+    };
+    const sum=(devices,key,kind='standalone')=>{
+      if(!devices.length)return null;
+      let total=0,found=false;
+      const field=kind==='hp_thermal'?hpKey[key]:kind==='hp_electrical'?hpElectricalKey[key]:key;
+      for(const d of devices){
+        const n=Number(d?.[field]);
+        if(Number.isFinite(n)){total+=Math.max(0,n);found=true;}
+      }
+      return found?total:null;
+    };
+    const rows=[['Today','energy_today_kwh','mdi:water-boiler'],['This week','energy_week_kwh','mdi:calendar-week-outline'],['This month','energy_month_kwh','mdi:calendar-month-outline'],['This year','energy_year_kwh','mdi:calendar-outline']];
 
-    const livePower=useHeatPumpFallback?0:dhw.reduce((n,d)=>n+Math.max(0,Number(d?.power_w)||0),0);
-    const running=useHeatPumpFallback
-      ?dhw.some(d=>/running|heating|dhw|active/i.test(String(d?.heat_pump_intelligence?.observed_activity||d?.heat_pump_intelligence?.interpreted_operating_state||'')))
-      :dhw.some(d=>d?.available!==false&&(Number(d?.power_w)||0)>10);
-    const tempDevice=useHeatPumpFallback
-      ?dhw.find(d=>Number.isFinite(Number(d?.heat_pump_intelligence?.dhw_temperature)))
-      :(dhw.find(d=>d?.temperature_entity&&d?.temperature_available&&Number.isFinite(Number(d?.temperature_c)))||dhw.find(d=>d?.temperature_entity));
-    // DHW Intelligence must represent stored-water/boiler temperature, not the
-    // ELWA element temperature (direct Modbus register 1001). Smart Control
-    // already keeps these two measurements separate, so prefer its canonical
-    // boiler/DHW evidence whenever available and only fall back to a registered
-    // DHW temperature mapping when no boiler evidence exists.
-    const dhwControlState=this._hass?.states?.['sensor.aion_ems_zeus_smart_control_simulation']||null;
-    const dhwControlAttrs=dhwControlState?.attributes||{};
-    // Smart Control Simulation exposes the latest compact transition directly.
-    // boiler_temperature_c is the canonical tank/DHW value; element_temperature_c
-    // remains the ELWA internal/element reading and must not drive DHW readiness.
-    const canonicalBoilerTemperature=Number(dhwControlAttrs?.boiler_temperature_c);
-    const temperature=useHeatPumpFallback
-      ?(tempDevice&&Number.isFinite(Number(tempDevice?.heat_pump_intelligence?.dhw_temperature))?Number(tempDevice.heat_pump_intelligence.dhw_temperature):null)
-      :(Number.isFinite(canonicalBoilerTemperature)?canonicalBoilerTemperature:(tempDevice&&tempDevice.temperature_available&&Number.isFinite(Number(tempDevice.temperature_c))?Number(tempDevice.temperature_c):null));
-    const targetTemperature=useHeatPumpFallback
-      ?(tempDevice&&Number.isFinite(Number(tempDevice?.heat_pump_intelligence?.dhw_target_temperature))?Number(tempDevice.heat_pump_intelligence.dhw_target_temperature):null)
-      :(()=>{const tempState=tempDevice?.temperature_entity?this.s(tempDevice.temperature_entity):null;const vals=[tempState?.attributes?.target_temperature,tempState?.attributes?.temperature_target,tempState?.attributes?.setpoint,tempState?.attributes?.target_temp,tempDevice?.target_temperature,tempDevice?.target_temperature_c].map(Number).filter(Number.isFinite);return vals.length?vals[0]:null;})();
-    const temperatureGap=(temperature!==null&&targetTemperature!==null)?targetTemperature-temperature:null;
-    const readyStatus=temperature===null?'Temperature unavailable':targetTemperature===null?'Temperature measured':temperature>=targetTemperature-.5?'At target':temperatureGap<=5?'Near target':'Heating reserve available';
-    const readyEvidence=temperature===null?'No mapped DHW temperature measurement is currently available.':targetTemperature===null?`${temperature.toFixed(1)} °C measured · no target temperature is exposed by the mapped Home Assistant entity.`:`${temperature.toFixed(1)} °C measured · ${targetTemperature.toFixed(1)} °C target${temperatureGap>0?` · ${temperatureGap.toFixed(1)} °C remaining`:''}.`;
+    const livePower=standalone.reduce((a,d)=>a+Math.max(0,Number(d?.power_w)||0),0);
+    const tempValues=standalone.map(d=>Number(d?.temperature_c??d?.water_temperature_c??d?.current_temperature_c)).filter(Number.isFinite);
+    const liveTemp=tempValues.length?tempValues[0]:null;
 
-    const deaRows=useHeatPumpFallback?[]:dhw.map(d=>this.deaDeviceForRegisteredDevice(d)).filter(Boolean).map(d=>(d?.periods||{}).today).filter(Boolean);
-    const deaSum=key=>deaRows.reduce((n,r)=>n+Math.max(0,Number(r?.[key])||0),0);
-    const attributedEnergy=deaRows.length?(deaSum('energy_kwh')||deaSum('total_kwh')):null;
-    const solarEnergy=deaRows.length?deaSum('solar_kwh'):null,batteryEnergy=deaRows.length?deaSum('battery_kwh'):null,gridEnergy=deaRows.length?deaSum('grid_kwh'):null;
-    const localEnergy=deaRows.length?(solarEnergy+batteryEnergy):null,sourceTotal=deaRows.length?Math.max(0,solarEnergy+batteryEnergy+gridEnergy):0;
-    const solarShare=sourceTotal>0?solarEnergy/sourceTotal*100:null,localShare=sourceTotal>0?localEnergy/sourceTotal*100:null;
-    const attributionEvidence=useHeatPumpFallback?'Heat Pump DHW thermal output is shown as measured DHW energy; electrical source attribution is not inferred from that thermal meter.':(!deaRows.length?'DEA source attribution is not available for the registered DHW device yet.':`DEA measured attribution · ${deaRows.length} registered DHW source${deaRows.length===1?'':'s'}.`);
-    const solarPower=Math.max(0,Number(this.value('sensor.aion_ems_zeus_solar_power'))||0),gridExport=Math.max(0,Number(this.value('sensor.aion_ems_zeus_grid_export_power'))||0),gridImport=Math.max(0,Number(this.value('sensor.aion_ems_zeus_grid_import_power'))||0),surplusAvailable=gridExport>150&&solarPower>150;
-    const guidance=useHeatPumpFallback
-      ?['Heat Pump DHW evidence',running?'Heat Pump activity is currently reported active. Zeus shows mapped DHW thermal-energy history without inferring electrical source attribution.':'Heat Pump DHW thermal-energy history is available from the mapped Heat Pump circuit.']
-      :(running?[surplusAvailable?'Heating during solar surplus':'Heating now',surplusAvailable?`DHW is drawing ${this.watts(livePower)} while the home exports ${this.watts(gridExport)}. Current measured conditions support solar-aligned heating.`:`DHW is drawing ${this.watts(livePower)}. Zeus does not infer the energy source from live power alone; today’s DEA attribution is shown separately.`]:surplusAvailable?['Solar window available',`The home is currently exporting ${this.watts(gridExport)} with ${this.watts(solarPower)} solar production. DHW is not currently heating; this is a measured surplus opportunity, recommendation only.`]:gridImport>150?['No solar-surplus signal',`The home is currently importing ${this.watts(gridImport)}. Zeus does not recommend shifting DHW based on an unmeasured future surplus.`]:['No strong live signal','Current grid flow does not establish a strong DHW timing opportunity. Zeus will not invent one.']);
-    const intelligenceRows=[['DHW state',running?'Heating':'Idle',useHeatPumpFallback?'Heat Pump DHW circuit evidence':'Measured DHW live power evidence'],['Water temperature',temperature===null?'Unavailable':`${temperature.toFixed(1)} °C`,readyEvidence],['Readiness',readyStatus,readyEvidence],['Today solar share',solarShare===null?'Unavailable':`${solarShare.toFixed(1)}%`,attributionEvidence],['Today local-energy share',localShare===null?'Unavailable':`${localShare.toFixed(1)}%`,attributionEvidence],['Timing guidance',guidance[0],guidance[1]]];
-    const valueOrUnavailable=key=>{const v=sum(key);return v===null?'Unavailable':this.kwh(v);};
+    const dea=this._deaData||{},deaDevices=Array.isArray(dea.devices)?dea.devices:[],ids=new Set(standalone.map(d=>String(d.id)));
+    const deaRows=deaDevices.filter(d=>ids.has(String(d.id))).map(d=>d?.periods?.today).filter(Boolean);
+    const deaToday=deaRows.length?deaRows.reduce((a,x)=>({
+      solar:a.solar+Math.max(0,Number(x.solar_kwh)||0),
+      battery:a.battery+Math.max(0,Number(x.battery_kwh)||0),
+      grid:a.grid+Math.max(0,Number(x.grid_kwh)||0),
+      total:a.total+Math.max(0,Number(x.energy_kwh??x.total_kwh)||0)
+    }),{solar:0,battery:0,grid:0,total:0}):null;
 
-    return `<section class="page dhw-statistics-page"><style>.statistics-authority-note{margin:14px 0 2px;padding:12px 14px;border:1px solid var(--line);border-radius:12px;background:var(--surface2);display:flex;gap:10px;align-items:flex-start}.statistics-authority-note b{white-space:nowrap;color:var(--accent2)}.statistics-authority-note span{color:var(--muted);line-height:1.45}</style><article class="panel spaced">
-      <div class="section-title"><div><span>STATISTICS · DHW</span><h2>DHW period energy history</h2><small>${this.esc(evidence)}</small></div><ha-icon icon="mdi:water-boiler"></ha-icon></div>
-      <div class="energy-statistics-grid">${rows.map(([label,key,icon])=>`<div class="energy-statistics-card"><ha-icon icon="${icon}"></ha-icon><div><span>${label}</span><b>${valueOrUnavailable(key)}</b><small>${useHeatPumpFallback?'Recorder-backed Heat Pump DHW thermal energy':'Recorder-backed DHW period energy'}</small></div></div>`).join('')}</div>
-      <div class="statistics-authority-note"><b>Accounting authority</b><span>These period cards use the mapped Recorder-backed DHW energy source only. DEA source attribution shown below is a separate registered-load attribution view and is not substituted into these period totals.</span></div>
-      <details class="ux-advanced-page"><summary><span>Advanced hot-water details<small>Temperature, source attribution and timing evidence</small></span></summary><div class="ux-advanced-page-body"><div class="section-title" style="margin-top:22px"><div><span>DHW · INTELLIGENCE</span><h2>Hot-water performance & planning</h2><small>Measured DHW entities and Recorder energy only. Recommendation only.</small></div><ha-icon icon="mdi:water-thermometer-outline"></ha-icon></div>
-      <div class="energy-statistics-grid">${intelligenceRows.map(([label,value,note])=>`<div class="energy-statistics-card"><ha-icon icon="mdi:${label==='Water temperature'?'thermometer-water':label==='Readiness'?'check-decagram-outline':label.includes('share')?'chart-donut':label==='Timing guidance'?'weather-sunny-alert':'water-boiler'}"></ha-icon><div><span>${this.esc(label)}</span><b>${this.esc(String(value))}</b><small>${this.esc(note)}</small></div></div>`).join('')}</div>
-      <div class="section-title" style="margin-top:22px"><div><span>DHW · DEA SOURCE EVIDENCE</span><h2>Today’s attributed registered-load energy</h2><small>${this.esc(attributionEvidence)} Separate from Recorder-backed DHW period history above.</small></div><ha-icon icon="mdi:transit-connection-variant"></ha-icon></div>
-      <div class="energy-statistics-grid"><div class="energy-statistics-card"><ha-icon icon="mdi:solar-power"></ha-icon><div><span>Solar</span><b>${solarEnergy===null?'Unavailable':this.kwh(solarEnergy)}</b><small>${solarShare===null?'Waiting for DEA evidence':`${solarShare.toFixed(1)}% of attributed DHW supply`}</small></div></div><div class="energy-statistics-card"><ha-icon icon="mdi:battery-high"></ha-icon><div><span>Battery</span><b>${batteryEnergy===null?'Unavailable':this.kwh(batteryEnergy)}</b><small>Measured DEA battery support</small></div></div><div class="energy-statistics-card"><ha-icon icon="mdi:transmission-tower"></ha-icon><div><span>Grid</span><b>${gridEnergy===null?'Unavailable':this.kwh(gridEnergy)}</b><small>Measured DEA grid attribution</small></div></div><div class="energy-statistics-card"><ha-icon icon="mdi:lightning-bolt-outline"></ha-icon><div><span>Attributed total</span><b>${attributedEnergy===null?'Unavailable':this.kwh(attributedEnergy)}</b><small>Registered DHW demand represented by DEA</small></div></div></div>
-    </div></details></article></section>`;
+    const standaloneEvidence=!standalone.length?'No standalone DHW / electric water heater is registered.':!standaloneRecorder.length?'Standalone DHW is registered, but Recorder-backed period statistics are not currently available. Zeus will not estimate them.':'Home Assistant Recorder · standalone DHW electrical energy only.';
+    const hpThermalConfigured=heatPumpDhw.some(d=>d?.dhw_thermal_energy_configured===true);
+    const hpElectricalConfigured=heatPumpDhw.some(d=>d?.dhw_electrical_energy_configured===true);
+    const hpEvidence=!heatPumpDhw.length
+      ?'No Heat Pump DHW circuit evidence is configured.'
+      :hpThermalConfigured&&heatPumpThermalRecorder.length
+        ?'Home Assistant Recorder · explicit Heat Pump DHW thermal-energy mapping.'
+        :hpElectricalConfigured&&heatPumpElectricalRecorder.length
+          ?'Home Assistant Recorder · Heat Pump DHW electrical input is available; no thermal DHW total is invented.'
+          :'Heat Pump DHW is configured, but Recorder-backed period energy statistics are not currently available. Zeus will not estimate them.';
+
+    const statCards=(devices,kind='standalone')=>rows.map(([label,key,icon])=>{
+      const note=kind==='hp_thermal'?'Heat Pump DHW thermal output':kind==='hp_electrical'?'Heat Pump DHW electrical input':'Standalone DHW electrical energy';
+      return `<div class="energy-statistics-card"><ha-icon icon="${icon}"></ha-icon><div><span>${label}</span><b>${this.kwh(sum(devices,key,kind))}</b><small>${note}</small></div></div>`;
+    }).join('');
+
+    return `<section class="page dhw-statistics-page">
+      <div class="page-head"><div><span>STATISTICS · DHW</span><h1>DHW</h1><p>Standalone electric hot-water use and Heat Pump DHW are shown separately because they represent different physical quantities.</p></div><ha-icon icon="mdi:water-boiler"></ha-icon></div>
+
+      <article class="panel"><div class="section-title"><div><span>DHW · LIVE</span><h2>Current hot-water evidence</h2></div><ha-icon icon="mdi:thermometer-water"></ha-icon></div><div class="energy-statistics-grid">
+        <div class="energy-statistics-card"><ha-icon icon="mdi:flash"></ha-icon><div><span>Standalone DHW power</span><b>${standalone.length?this.watts(livePower):'Unavailable'}</b><small>${standalone.length?'Registered standalone electrical DHW load':'No standalone DHW registered'}</small></div></div>
+        <div class="energy-statistics-card"><ha-icon icon="mdi:thermometer-water"></ha-icon><div><span>DHW temperature</span><b>${liveTemp==null?'Unavailable':`${liveTemp.toFixed(1)} °C`}</b><small>Mapped boiler / stored-water temperature when available</small></div></div>
+        <div class="energy-statistics-card"><ha-icon icon="mdi:heat-pump-outline"></ha-icon><div><span>Heat Pump DHW sources</span><b>${heatPumpDhw.length}</b><small>${heatPumpDhw.length?'Existing Heat Pump Intelligence mappings':'None configured'}</small></div></div>
+      </div></article>
+
+      <article class="panel spaced"><div class="section-title"><div><span>STANDALONE DHW</span><h2>Electric / ELWA energy</h2><small>${this.esc(standaloneEvidence)}</small></div><ha-icon icon="mdi:water-boiler"></ha-icon></div><div class="energy-statistics-grid">${standalone.length?statCards(standaloneRecorder,'standalone'):'<div class="empty">No standalone DHW / ELWA device registered.</div>'}</div></article>
+
+      <article class="panel spaced"><div class="section-title"><div><span>HEAT PUMP DHW</span><h2>Hot-water energy from the Heat Pump</h2><small>${this.esc(hpEvidence)}</small></div><ha-icon icon="mdi:heat-pump-outline"></ha-icon></div>
+        ${hpThermalConfigured?`<div class="dhw-hp-subsection"><div class="section-title"><div><span>THERMAL OUTPUT</span><h3>DHW heat delivered</h3></div></div><div class="energy-statistics-grid">${statCards(heatPumpThermalRecorder,'hp_thermal')}</div></div>`:''}
+        ${hpElectricalConfigured?`<div class="dhw-hp-subsection"><div class="section-title"><div><span>ELECTRICAL INPUT</span><h3>DHW electricity used</h3></div></div><div class="energy-statistics-grid">${statCards(heatPumpElectricalRecorder,'hp_electrical')}</div></div>`:''}
+        ${!hpThermalConfigured&&!hpElectricalConfigured?'<div class="empty">No Heat Pump DHW energy mapping configured.</div>':''}
+      </article>
+
+      <article class="panel spaced"><div class="section-title"><div><span>DHW · ACCOUNTING</span><h2>Separate by design</h2></div><ha-icon icon="mdi:scale-balance"></ha-icon></div><p>Standalone electric DHW and Heat Pump DHW electrical input are electrical quantities. Heat Pump DHW thermal output is heat delivered. Zeus keeps electrical input and thermal output separate and never adds unlike measurements into a fake total.</p></article>
+
+      ${deaToday?`<article class="panel spaced"><div class="section-title"><div><span>DHW · SOURCE ATTRIBUTION</span><h2>Standalone DHW source evidence</h2><small>DEA applies to registered electrical DHW loads only.</small></div><ha-icon icon="mdi:source-branch-check"></ha-icon></div><div class="energy-statistics-grid">
+        <div class="energy-statistics-card"><ha-icon icon="mdi:solar-power"></ha-icon><div><span>Solar</span><b>${this.kwh(deaToday.solar)}</b><small>Measured DEA solar support</small></div></div>
+        <div class="energy-statistics-card"><ha-icon icon="mdi:battery-high"></ha-icon><div><span>Battery</span><b>${this.kwh(deaToday.battery)}</b><small>Measured DEA battery support</small></div></div>
+        <div class="energy-statistics-card"><ha-icon icon="mdi:transmission-tower"></ha-icon><div><span>Grid</span><b>${this.kwh(deaToday.grid)}</b><small>Measured DEA grid attribution</small></div></div>
+        <div class="energy-statistics-card"><ha-icon icon="mdi:lightning-bolt-outline"></ha-icon><div><span>Attributed total</span><b>${this.kwh(deaToday.total)}</b><small>Standalone electrical DHW demand represented by DEA</small></div></div>
+      </div></article>`:''}
+    <style>.dhw-hp-subsection+.dhw-hp-subsection{margin-top:22px}.dhw-hp-subsection h3{margin:3px 0 0;font-size:18px}</style></section>`;
   } heatPumpStatisticsPanel(){
     const isHeatPumpDevice=d=>{
       const text=[d?.type,d?.category,d?.role,d?.name,d?.friendly_name].filter(Boolean).join(' ').toLowerCase().replaceAll('_',' ');
@@ -6021,7 +6064,7 @@ class AionEmsEnergyFlowDashboard extends HTMLElement {
             <div class="wh-equals">=</div>
             <div class="wh-source home"><ha-icon icon="mdi:home-lightning-bolt-outline"></ha-icon><span>Home</span><b>${this.kwh(wholeHome)}</b><small>${Math.abs(wholeBalanceDelta)<.05?'Balanced':`Δ ${this.kwh(wholeBalanceDelta)}`}</small></div>
           </div>
-          
+
         </article>
         <article class="panel wh-flow-panel wh-local-value-panel"><div class="section-title"><div><span>LOCAL ENERGY VALUE</span><h2>What local supply achieved</h2></div><ha-icon icon="mdi:cash-check"></ha-icon></div>
           <div class="finance-flow-grid compact zeus-kpi-grid zeus-grid-4 wh-local-value-grid"><div><span>Local supply</span><b>${this.kwh(canonicalLocal)}</b><small>${wholeCoverage.toFixed(1)}% coverage</small></div><div><span>Avoided grid value</span><b>${this.money(wholeAvoided,currency)}</b><small>Canonical local supply</small></div><div><span>Grid import</span><b>${this.kwh(wholeImport)}</b><small>${this.money(wholeImport*tariff,currency)} purchased</small></div><div><span>Export credit</span><b>${this.money(wholeExportValue,currency)}</b><small>${this.kwh(wholeExport)} exported</small></div></div>
@@ -6052,7 +6095,7 @@ class AionEmsEnergyFlowDashboard extends HTMLElement {
       .efi-scope-switch{display:flex;gap:6px;padding:5px;border:1px solid var(--line);border-radius:14px;background:var(--surface2);width:max-content;margin:14px 0}.efi-scope-switch button{border:0;background:transparent;color:var(--muted);padding:9px 14px;border-radius:10px;font-weight:700;cursor:pointer}.efi-scope-switch button.selected{background:var(--accent);color:#07131c}.efi-scope-note{color:var(--muted);font-size:12px;margin:0 0 12px}.efi-hidden{display:none!important}.wh-kpis .wh-flow-card{display:flex;align-items:flex-start;gap:12px;min-width:0;padding:16px}.wh-flow-card>div{min-width:0}.wh-flow-card span,.wh-flow-card small{display:block;line-height:1.35}.wh-flow-card b{display:block;font-size:18px;line-height:1.25;margin:5px 0;white-space:normal}.wh-flow-card ha-icon{color:var(--accent2);flex:0 0 auto;margin-top:3px}.wh-flow-card.solar ha-icon{color:#ffd55c}.wh-flow-card.battery ha-icon{color:#55d8c0}.wh-flow-card.grid ha-icon{color:#ff7188}.wh-flow-card.coverage ha-icon,.wh-flow-card.home ha-icon{color:#62d9a0}.wh-flow-grid{display:grid;grid-template-columns:1.08fr .92fr;gap:14px;margin:14px 0}.wh-flow-panel{margin:0!important}.wh-local-value-panel{min-width:0}.wh-local-value-grid{grid-template-columns:repeat(2,minmax(0,1fr))!important}.wh-local-value-grid>div{min-height:118px!important}.wh-local-value-grid b{font-size:19px!important}.wh-export-source-note{margin:12px 0 0!important;padding-top:10px;border-top:1px solid var(--line)}.wh-source-flow{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));align-items:stretch;gap:12px}.wh-source-flow .wh-plus,.wh-source-flow .wh-equals{display:none}.wh-source-flow .wh-source{min-height:132px;display:flex;flex-direction:column;justify-content:center}.wh-source-flow .wh-source.grid{grid-column:1 / 2}.wh-source-flow .wh-source.home{grid-column:2 / 4}.wh-source{padding:15px 10px;border:1px solid var(--line);border-radius:14px;background:var(--surface2);text-align:center}.wh-source ha-icon{display:block;margin:0 auto 7px}.wh-source span,.wh-source small{display:block;color:var(--muted);font-size:11px}.wh-source b{display:block;font-size:16px;margin:4px 0}.wh-source.solar ha-icon{color:#ffd55c}.wh-source.battery ha-icon{color:#55d8c0}.wh-source.unresolved ha-icon{color:#ffc45c}.wh-source.unresolved{border-color:rgba(255,196,92,.28);background:linear-gradient(145deg,rgba(255,196,92,.07),var(--surface2))}.wh-source.grid ha-icon{color:#ff7188}.wh-source.home ha-icon{color:#62d9a0}.wh-plus,.wh-equals{font-weight:800;color:var(--accent2);font-size:18px}.wh-story{margin-top:14px}@media(max-width:1050px){.wh-flow-grid{grid-template-columns:1fr}.wh-source-flow{grid-template-columns:repeat(2,minmax(0,1fr))}.wh-source-flow .wh-source.grid,.wh-source-flow .wh-source.home{grid-column:auto}}@media(max-width:650px){.efi-scope-switch{width:100%}.efi-scope-switch button{flex:1;padding:9px 8px;font-size:12px}}
       </style><div class="analytics-topbar"><div><span class="eyebrow">${scope==='whole_home'?'STATISTICS · WHOLE HOME':'STATISTICS · DEA'}</span><h1>Energy Flow Intelligence</h1><p>${scope==='whole_home'?'Canonical whole-home understanding of where house energy came from and what local energy achieved.':'Measured device-level understanding of where registered-load energy came from, where it went and what could be used better.'}</p></div><div class="period-switch">${buttons.map(x=>`<button type="button" data-energy-flow-intelligence-period="${x}" class="period-button ${period===x?'selected':''}">${this.periodLabel(x)}</button>`).join('')}</div></div>
       <div class="efi-scope-switch" role="tablist" aria-label="Energy Flow Intelligence scope"><button type="button" data-energy-flow-intelligence-scope="whole_home" class="${scope==='whole_home'?'selected':''}">Whole Home</button><button type="button" data-energy-flow-intelligence-scope="registered" class="${scope==='registered'?'selected':''}">Registered Loads (DEA)</button></div>
-      
+
       <div class="${scope==='whole_home'?'':'efi-hidden'}">${wholeHomeView}</div>
       <div class="efi-dea-content ${scope==='registered'?'':'efi-hidden'}"><div class="energy-finance-kpis"><article class="saving"><ha-icon icon="mdi:source-branch-check"></ha-icon><span>DEA local generation</span><strong>${this.kwh(generationAttributed)}</strong><small>${this.esc(generationSummary)}</small></article><article><ha-icon icon="mdi:battery-high"></ha-icon><span>DEA battery</span><strong>${this.kwh(totals.battery)}</strong><small>${(totals.battery/sourceTotal*100).toFixed(1)}% of attributed load</small></article><article><ha-icon icon="mdi:transmission-tower-import"></ha-icon><span>DEA grid</span><strong>${this.kwh(totals.grid)}</strong><small>${(totals.grid/sourceTotal*100).toFixed(1)}% of attributed load</small></article><article class="saving"><ha-icon icon="mdi:cash-plus"></ha-icon><span>Avoided grid value</span><strong>${this.money(localAttributed*tariff,currency)}</strong><small>Measured local-energy support</small></article><article><ha-icon icon="mdi:target"></ha-icon><span>${periodTitle} measured-flow coverage</span><strong>${coverage.toFixed(0)}%</strong><small>${measured} of ${displayDeviceCount} loads with measured power-flow evidence this period</small></article></div>
       <div class="analytics-main-grid">${rankCards}</div>
@@ -6128,8 +6171,8 @@ class AionEmsEnergyFlowDashboard extends HTMLElement {
       <div class="energy-finance-comparison-grid"><article class="panel zeus-panel energy-finance-comparison-panel"><div class="section-title"><div><span>WHOLE-HOME FINANCE</span><h2>${this.esc(periodTitle)} energy value</h2></div><span class="badge">${this.esc(currency)}</span></div><div class="finance-flow-grid zeus-kpi-grid zeus-grid-5"><div><span>Consumption value</span><b>${this.money(baselineCost,currency)}</b><small>Without local energy</small></div><div><span>Solar saving</span><b class="positive">${this.money(totalSolarSaving,currency)}</b><small>${this.kwh(directSolar)} · ${(solarShare*100).toFixed(1)}% of home</small></div><div><span>Battery saving</span><b class="positive">${this.money(totalBatterySaving,currency)}</b><small>${this.kwh(batteryToHome)} · ${(batteryShare*100).toFixed(1)}% of home</small></div><div><span>Export credit</span><b class="positive">${this.money(exportRevenue,currency)}</b><small>${this.kwh(exp)} exported</small></div><div><span>Actual import cost</span><b>${this.money(importCost,currency)}</b><small>${this.kwh(imp)} imported</small></div></div><p class="energy-finance-note">Local-energy savings: <b class="positive">${this.money(totalLocalSaving,currency)}</b> from direct solar plus whole-home Battery → Home support.</p></article><article class="panel zeus-panel energy-finance-comparison-panel"><div class="section-title"><div><span>REGISTERED LOADS</span><h2>Device finance coverage</h2></div><ha-icon icon="mdi:devices"></ha-icon></div><div class="finance-flow-grid compact zeus-kpi-grid zeus-grid-5"><div><span>Loads measured</span><b>${devices.length}</b><small>&nbsp;</small></div><div><span>Registered consumption</span><b>${this.kwh(registeredEnergy)}</b><small>&nbsp;</small></div><div><span>Allocated solar</span><b>${this.kwh(registeredSolar)}</b><small>${this.money(registeredSaving,currency)} saved</small></div><div><span>Allocated battery</span><b>${this.kwh(registeredBattery)}</b><small>${this.money(registeredBatterySaving,currency)} saved</small></div><div><span>Device local savings</span><b class="positive">${this.money(registeredSaving+registeredBatterySaving,currency)}</b><small>Solar + battery</small></div></div></article></div>
       ${yearSoFar}
       ${registeredDeviceEconomics}
-      
-      
+
+
       ${this.planningOutlookCards('finance')}
       </section>`;
   }
@@ -6182,6 +6225,10 @@ class AionEmsEnergyFlowDashboard extends HTMLElement {
     ]);
     const rows=periods.map((x,i)=>`<div class="tou-row" data-tou-row><input data-tou-name value="${this.esc(x.name||`Period ${i+1}`)}" aria-label="Period name"><input data-tou-start type="time" value="${this.esc(x.start||'00:00')}" aria-label="Start time"><input data-tou-end type="time" value="${this.esc(x.end||'00:00')}" aria-label="End time"><input data-tou-rate type="text" inputmode="decimal" value="${this.esc(x.import_tariff??'')}" placeholder="Price / kWh" aria-label="Import price"><button type="button" data-remove-tou class="secondary-button">Remove</button></div>`).join('');
     return `<article class="panel spaced tariff-config-panel"><div class="section-title"><div><span>TARIFFS</span><h2>Energy prices</h2></div><ha-icon icon="mdi:cash-multiple"></ha-icon></div><p class="configuration-note">Choose a fixed import price or a local-time schedule such as Night / Day / Peak. Export uses the configured tariff unless dynamic pricing with export depreciation is active.</p><div class="tariff-grid"><label>Currency<input id="tariff-currency" type="text" maxlength="4" autocomplete="off" value="${this.esc(currency)}"></label><label>Tariff mode<select id="tariff-mode"><option value="fixed" ${mode==='fixed'?'selected':''}>Fixed</option><option value="time_of_use" ${mode==='time_of_use'?'selected':''}>Time of Use</option></select></label><label>Export tariff / kWh<input id="tariff-export" type="text" inputmode="decimal" autocomplete="off" value="${this.esc(exportTariff)}"></label><label>Export depreciation / kWh<input id="tariff-export-depreciation" type="text" inputmode="decimal" autocomplete="off" value="${this.esc(exportDepreciation)}" placeholder="Optional · dynamic prices"></label></div><p class="configuration-note"><b>Dynamic export value:</b> when depreciation is set, Zeus values each dynamic export slot as purchase price − export depreciation. Leave blank to keep the configured export tariff.</p><div id="fixed-tariff-fields" style="${mode==='fixed'?'':'display:none'}"><div class="tariff-grid"><label>Import tariff / kWh<input id="tariff-import" type="text" inputmode="decimal" autocomplete="off" value="${this.esc(fixedImport)}"></label></div></div><div id="tou-tariff-fields" style="${mode==='time_of_use'?'':'display:none'}"><div class="tou-head"><b>Import tariff periods</b><small>Periods must cover the full 24 hours with no overlaps.</small></div><div id="tou-period-list">${rows}</div><button type="button" id="add-tou-period" class="secondary-button">Add tariff period</button>${mode==='time_of_use'&&f.active_tariff_name?`<p class="data-note">Active now: <b>${this.esc(f.active_tariff_name)}</b> · ${this.money(Number(f.active_import_tariff)||0,String(currency).toUpperCase())}/kWh</p>`:''}</div><div class="buttons"><button id="save-tariffs" class="primary-button">Save Tariffs</button><button id="clear-tariffs" class="secondary-button">Clear</button></div></article>`;
+  }
+
+  tariffsPage(){
+    return `<section class="page tariffs-page"><div class="page-head"><div><span>FINANCE · TARIFFS</span><h1>Tariffs</h1><p>Configure fixed or time-of-use import prices, export value and optional dynamic export depreciation.</p></div><ha-icon icon="mdi:cash-cog"></ha-icon></div>${this.tariffEditorPanel()}</section>`;
   }
 
   /* FINANCE HUMAN VIEW LOCKED — change only for explicit request/bug fix. */
@@ -11072,7 +11119,6 @@ pre,code,.entity-id,.mono{overflow-wrap:anywhere;word-break:break-word}
 }
 
 
-
 .smart-control-foundation{border-color:#285548!important}
 
 .control-update-status{display:grid;grid-template-columns:auto 1fr auto;gap:12px;align-items:center;margin:12px 0 18px;padding:12px 14px;border:1px solid var(--line);border-radius:12px;background:rgba(15,33,43,.62)}
@@ -11174,7 +11220,6 @@ pre,code,.entity-id,.mono{overflow-wrap:anywhere;word-break:break-word}
 .control-dry-run-note{margin-top:20px!important;padding-top:14px!important;padding-bottom:10px!important}
 
 
-
 /* alpha.31 Add/Edit Device readability polish — visual only; capability logic unchanged. */
 #devControlCandidate{margin-top:28px!important;padding:22px 20px 20px!important}
 #devControlCandidate>.heat-pump-input-head{margin:0 0 22px!important;padding:0 0 16px!important;border-bottom:1px solid rgba(120,150,165,.14)!important}
@@ -11207,7 +11252,6 @@ pre,code,.entity-id,.mono{overflow-wrap:anywhere;word-break:break-word}
 #devControlCandidate + .buttons{margin-top:20px!important}
 #devControlCandidate + .buttons + .hint{margin-top:14px!important;line-height:1.55!important}
 @media(max-width:760px){#devControlCandidate{padding:18px 14px!important}.control-permissions-row{gap:16px!important}.elwa23-settings-grid{gap:14px!important}}
-
 
 
 /* alpha.22 ELWA structural desktop-grid cleanup */
@@ -13135,43 +13179,6 @@ if(!customElements.get('aion-ems-zeus-command-center')) customElements.define('a
 /* v14.0.0-alpha.22.8.8.8 Calendar Week Device Finance Alignment */
 
 /* v14.0.0-alpha.22.8.9.0 Registered Load Power-History Period Authority */
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 /* AION EMS Zeus Heat Pump Cycle Intelligence v1: v14.5.12 */

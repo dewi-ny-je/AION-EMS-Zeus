@@ -4425,22 +4425,42 @@ class DeviceAnalyticsEngine:
             # statistic as its raw cumulative sum when no previous bucket exists.
             # We must never interpret that baseline as one day of energy.
             start_local = dt_util.start_of_local_day(now - timedelta(days=402))
-            end_local = dt_util.start_of_local_day(now + timedelta(days=1))
-            response = await self.hass.services.async_call(
+            today_start = dt_util.start_of_local_day(now)
+            today_end = dt_util.start_of_local_day(now + timedelta(days=1)) - timedelta(microseconds=1)
+
+            # Completed local days use Recorder day buckets. The current day is
+            # queried separately at hour resolution, matching Home Assistant's
+            # Energy-window semantics and avoiding a lagging/incomplete day bucket.
+            history_response = await self.hass.services.async_call(
                 "recorder", "get_statistics",
                 {
                     "statistic_ids": entity_ids,
                     "start_time": start_local,
-                    "end_time": end_local,
+                    "end_time": today_start,
                     "period": "day",
                     "types": ["change", "sum", "max", "state"],
                     "units": {"energy": "kWh"},
                 },
                 blocking=True, return_response=True,
             )
-            raw_stats = (response or {}).get("statistics", response or {})
+            today_response = await self.hass.services.async_call(
+                "recorder", "get_statistics",
+                {
+                    "statistic_ids": entity_ids,
+                    "start_time": today_start,
+                    "end_time": today_end,
+                    "period": "hour",
+                    "types": ["change", "sum", "max", "state"],
+                    "units": {"energy": "kWh"},
+                },
+                blocking=True, return_response=True,
+            )
+            raw_history = (history_response or {}).get("statistics", history_response or {})
+            raw_today = (today_response or {}).get("statistics", today_response or {})
             result: dict[str, dict[str, float]] = {}
             recorder_fallbacks: dict[str, str] = {}
+            today_methods: dict[str, str] = {}
+
             for device in recorder_sources:
                 entity_id = str(device.get("energy_entity"))
                 state = self.hass.states.get(entity_id)
@@ -4452,15 +4472,11 @@ class DeviceAnalyticsEngine:
                     token in identifier for token in ("today", "daily", "day_energy", "energy_day", "daily_energy")
                 )
 
-                rows = [r for r in list((raw_stats or {}).get(entity_id) or []) if isinstance(r, dict)]
+                rows = [r for r in list((raw_history or {}).get(entity_id) or []) if isinstance(r, dict)]
                 rows.sort(key=lambda r: self._statistics_start_datetime(r.get("start")) or datetime.min.replace(tzinfo=timezone.utc))
 
-                # Home Assistant normally supplies `change` for total_increasing
-                # energy statistics. Some integrations/older statistics streams
-                # expose cumulative `sum` but no daily `change`. In that case Zeus
-                # derives local-day growth from consecutive Recorder sums. This is
-                # Recorder-backed evidence, not lifetime-state subtraction, and it
-                # remains reset-safe by accepting only positive growth.
+                # Completed days: use Recorder change for cumulative meters, with
+                # a reset-safe Recorder-sum growth fallback where change is absent.
                 previous_sum: float | None = None
                 used_sum_growth = False
                 for row in rows:
@@ -4477,8 +4493,6 @@ class DeviceAnalyticsEngine:
                         current_sum = self._num_stat(row.get("sum"))
                         if value is None and current_sum is not None and previous_sum is not None:
                             growth = current_sum - previous_sum
-                            # A negative jump is a Recorder/statistic reset boundary,
-                            # not negative consumption. Do not invent energy across it.
                             value = growth if growth >= -0.001 else None
                             used_sum_growth = value is not None
                         if current_sum is not None:
@@ -4489,6 +4503,42 @@ class DeviceAnalyticsEngine:
                     day = dt_util.as_local(stamp).date().isoformat()
                     result.setdefault(entity_id, {})[day] = round(max(value, 0.0), 4)
 
+                # Current local day: aggregate hourly Recorder evidence instead of
+                # trusting an incomplete day bucket. For total_increasing meters,
+                # sum hourly changes exactly like HA Energy. For daily-reset /
+                # measurement meters, take the highest available hourly max/state.
+                today_rows = [r for r in list((raw_today or {}).get(entity_id) or []) if isinstance(r, dict)]
+                today_value: float | None = None
+                if daily_meter:
+                    candidates: list[float] = []
+                    for row in today_rows:
+                        stamp = self._statistics_start_datetime(row.get("start"))
+                        if stamp is None or dt_util.as_local(stamp).date() != now.date():
+                            continue
+                        value = self._num_stat(row.get("max"))
+                        if value is None:
+                            value = self._num_stat(row.get("state"))
+                        if value is not None and value >= -0.001:
+                            candidates.append(max(value, 0.0))
+                    if candidates:
+                        today_value = max(candidates)
+                        today_methods[entity_id] = "hourly_recorder_daily_meter_max"
+                else:
+                    changes: list[float] = []
+                    for row in today_rows:
+                        stamp = self._statistics_start_datetime(row.get("start"))
+                        if stamp is None or dt_util.as_local(stamp).date() != now.date():
+                            continue
+                        value = self._num_stat(row.get("change"))
+                        if value is not None and value >= -0.001:
+                            changes.append(max(value, 0.0))
+                    if changes:
+                        today_value = sum(changes)
+                        today_methods[entity_id] = "hourly_recorder_change_sum"
+
+                if today_value is not None:
+                    result.setdefault(entity_id, {})[now.date().isoformat()] = round(max(today_value, 0.0), 4)
+
                 if used_sum_growth:
                     recorder_fallbacks[entity_id] = "recorder_sum_growth"
             self._recorder_days = result
@@ -4496,7 +4546,8 @@ class DeviceAnalyticsEngine:
                 "status": "Ready", "entity_count": len(entity_ids),
                 "row_count": sum(len(v) for v in result.values()),
                 "source": "Home Assistant Recorder statistics · local-day aligned",
-                "period_delta_method": "Recorder change; cumulative sum-growth fallback when change is unavailable",
+                "period_delta_method": "Completed local days use Recorder day evidence; current local day uses hourly Recorder evidence",
+                "current_day_methods": dict(today_methods),
                 "sum_growth_fallback_entities": dict(recorder_fallbacks),
             }
         except Exception as err:

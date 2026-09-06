@@ -1191,7 +1191,6 @@ async def async_setup_services(hass: HomeAssistant) -> None:
         await _refresh_aion_entities(hass)
 
 
-
     async def save_home_profile(call: ServiceCall) -> None:
         core = _core(hass)
         owner_name = str(call.data.get("owner_name", "")).strip()[:80]

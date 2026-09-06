@@ -367,4 +367,3 @@ class PredictionAccuracyEngine:
 
     def summary(self) -> dict[str, Any]:
         return self._summary
-

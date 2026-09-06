@@ -15,6 +15,7 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import MATCH_ALL
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.update_coordinator import CoordinatorEntity, DataUpdateCoordinator
+from homeassistant.helpers.restore_state import RestoreEntity
 from homeassistant.helpers import entity_registry as er
 
 from .const import DOMAIN, NAME, VERSION
@@ -229,7 +230,6 @@ def _smart_control_safety_attributes(core) -> dict[str, Any]:
         "recorder_policy": "state_only",
         "recorder_safe": True,
     }
-
 
 
 def _learning_preview_attributes(core) -> dict[str, Any]:
@@ -767,6 +767,13 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_e
         unique_id=f"{DOMAIN}_zeus_elwa_temperature",
         suggested_object_id="zeus_elwa_temperature",
         original_name="ELWA Temperature",
+    )
+    entity_registry.async_get_or_create(
+        domain="sensor",
+        platform=DOMAIN,
+        unique_id=f"{DOMAIN}_zeus_elwa_energy",
+        suggested_object_id="zeus_elwa_energy",
+        original_name="ELWA Energy",
     )
 
     _update_check = {"checked_at": None, "status": "checking", "latest_version": None, "latest_channel": None, "release_url": None, "error": None}
@@ -1599,6 +1606,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_e
         EnergyFlowValueSensor(coordinator, core, "Known Major Loads Power", "known_major_loads_power", "known_major_loads_power", "mdi:devices", "W", SensorDeviceClass.POWER),
         ElwaDirectValueSensor(coordinator, core, "ELWA Power", "zeus_elwa_power", "power_w", "sensor.zeus_elwa_power", "mdi:water-boiler", "W", SensorDeviceClass.POWER),
         ElwaDirectValueSensor(coordinator, core, "ELWA Temperature", "zeus_elwa_temperature", "temperature_c", "sensor.zeus_elwa_temperature", "mdi:thermometer-water", "°C", SensorDeviceClass.TEMPERATURE),
+        ElwaDirectEnergySensor(coordinator, core),
     ])
     async_add_entities(sensors)
 
@@ -2080,6 +2088,111 @@ class ElwaDirectValueSensor(CoordinatorEntity, SensorEntity):
             # my-PV register 1001 is encoded in 1/10 °C.
             attrs.update({"register": 1001, "register_type": "holding", "raw_scale": 0.1, "scaling": "1/10 °C"})
         return attrs
+
+
+class ElwaDirectEnergySensor(CoordinatorEntity, RestoreEntity, SensorEntity):
+    """Zeus-owned cumulative ELWA energy derived only from Direct Modbus power.
+
+    The ELWA Direct Modbus interface exposes instantaneous electrical power but
+    no canonical lifetime-energy register used by Zeus. Integrate the measured
+    Zeus power locally so Energy/DHW statistics no longer depend on an external
+    helper sensor. The total is restored after Home Assistant restarts.
+
+    Safety rule: gaps longer than five minutes are not bridged. Missing samples
+    therefore create a small evidence gap instead of inventing consumption.
+    """
+
+    _attr_has_entity_name = True
+    _attr_name = "ELWA Energy"
+    _attr_unique_id = f"{DOMAIN}_zeus_elwa_energy"
+    _attr_icon = "mdi:water-boiler"
+    _attr_native_unit_of_measurement = "kWh"
+    _attr_device_class = SensorDeviceClass.ENERGY
+    _attr_state_class = SensorStateClass.TOTAL_INCREASING
+
+    def __init__(self, coordinator, core) -> None:
+        CoordinatorEntity.__init__(self, coordinator)
+        self.core = core
+        self.entity_id = "sensor.zeus_elwa_energy"
+        self._energy_kwh = 0.0
+        self._last_sample_at: datetime | None = None
+        self._last_power_w: float | None = None
+        self._sample_count = 0
+        self._gap_count = 0
+        self._restored = False
+
+    async def async_added_to_hass(self) -> None:
+        await super().async_added_to_hass()
+        previous = await self.async_get_last_state()
+        if previous is not None:
+            try:
+                value = float(previous.state)
+                if value >= 0:
+                    self._energy_kwh = value
+                    self._restored = True
+            except (TypeError, ValueError):
+                pass
+        # Start a new integration interval at startup; never bridge downtime.
+        self._last_sample_at = datetime.now(timezone.utc)
+        direct = _elwa_direct_evidence(self.core)
+        try:
+            self._last_power_w = max(0.0, float(direct.get("power_w"))) if direct.get("power_w") is not None else None
+        except (TypeError, ValueError):
+            self._last_power_w = None
+
+    def _integrate_sample(self) -> None:
+        now = datetime.now(timezone.utc)
+        direct = _elwa_direct_evidence(self.core)
+        configured = bool(direct.get("configured"))
+        connected = bool(direct.get("connected"))
+        try:
+            power_w = max(0.0, float(direct.get("power_w"))) if direct.get("power_w") is not None else None
+        except (TypeError, ValueError):
+            power_w = None
+
+        if self._last_sample_at is not None:
+            seconds = max(0.0, (now - self._last_sample_at).total_seconds())
+            # Do not integrate through HA/ELWA outages or stale intervals.
+            if configured and connected and power_w is not None and self._last_power_w is not None and 0 < seconds <= 300:
+                average_power_w = (self._last_power_w + power_w) / 2.0
+                self._energy_kwh += average_power_w * seconds / 3_600_000.0
+                self._sample_count += 1
+            elif seconds > 300:
+                self._gap_count += 1
+
+        self._last_sample_at = now
+        self._last_power_w = power_w if configured and connected else None
+
+    def _handle_coordinator_update(self) -> None:
+        self._integrate_sample()
+        super()._handle_coordinator_update()
+
+    @property
+    def native_value(self):
+        return round(max(0.0, self._energy_kwh), 6)
+
+    @property
+    def available(self) -> bool:
+        # Keep cumulative energy available across temporary ELWA disconnects.
+        # The live Power sensor communicates the connection state.
+        direct = _elwa_direct_evidence(self.core)
+        return bool(direct.get("configured")) or self._restored or self._energy_kwh > 0
+
+    @property
+    def extra_state_attributes(self):
+        direct = _elwa_direct_evidence(self.core)
+        return {
+            "source": "zeus_direct_modbus_power_integration",
+            "power_entity": "sensor.zeus_elwa_power",
+            "configured": bool(direct.get("configured")),
+            "connected": bool(direct.get("connected")) if direct.get("configured") else False,
+            "integration_method": "trapezoidal measured power",
+            "gap_policy": "Intervals over 300 seconds are not integrated",
+            "sample_count": self._sample_count,
+            "gap_count": self._gap_count,
+            "restored_after_restart": self._restored,
+            "recorder_authority": "Home Assistant Recorder total_increasing statistics",
+        }
 
 
 class TopologyValueSensor(CoordinatorEntity, SensorEntity):

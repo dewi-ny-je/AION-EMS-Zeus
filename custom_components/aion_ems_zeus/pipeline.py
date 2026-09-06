@@ -1395,7 +1395,6 @@ class DataLake:
         self.refresh_summary()
 
 
-
     async def _async_seed_total_increasing_today(self):
         """Seed the active battery operating cycle from cumulative BYD meters.
 
