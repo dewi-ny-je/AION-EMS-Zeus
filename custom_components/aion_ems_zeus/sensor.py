@@ -293,6 +293,47 @@ def _intelligence_memory_attributes(core) -> dict[str, Any]:
     }
 
 
+def _local_weather_observation_attributes(core) -> dict[str, Any]:
+    """Expose configured on-site weather observations without conflating them with forecast weather."""
+    cfg = ((core.registry.data.get("sources") or {}).get("local_weather_station") or {})
+    entities = cfg.get("entities") if isinstance(cfg.get("entities"), dict) else {}
+    rows: dict[str, Any] = {}
+    available = 0
+    for field, entity_id in entities.items():
+        state = core.hass.states.get(str(entity_id)) if entity_id else None
+        ok = state is not None and state.state not in {"unknown", "unavailable", "none", ""}
+        if ok:
+            available += 1
+        value: Any = state.state if state is not None else None
+        try:
+            if value is not None:
+                value = float(value)
+        except (TypeError, ValueError):
+            pass
+        rows[field] = {
+            "entity_id": entity_id,
+            "value": value,
+            "unit": state.attributes.get("unit_of_measurement") if state is not None else None,
+            "available": ok,
+            "friendly_name": state.attributes.get("friendly_name") if state is not None else None,
+        }
+    solar = rows.get("solar_radiation") or {}
+    return {
+        "status": "Ready" if cfg.get("enabled") and available else ("Waiting" if cfg.get("enabled") else "Not configured"),
+        "enabled": bool(cfg.get("enabled")),
+        "name": cfg.get("name") or "Local Weather Station",
+        "mapped_count": len(entities),
+        "available_count": available,
+        "observations": rows,
+        "solar_radiation": solar.get("value"),
+        "solar_radiation_unit": solar.get("unit"),
+        "source_role": "local_measured_observation",
+        "forecast_role": "Regional/online weather remains the forward-looking forecast authority.",
+        "principle": "Local station observations verify and explain forecasts; they do not silently replace forecast weather.",
+        "recorder_safe": True,
+    }
+
+
 def _weather_context_attributes(core) -> dict[str, Any]:
     """Expose a compact Recorder-safe Weather Context payload.
 
@@ -1512,6 +1553,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_e
         DailyBriefingSensor(coordinator, core, "Daily Briefing", "daily_briefing", "mdi:text-box-check-outline", lambda c: c.daily_briefing.summary().get("status"), lambda c: c.daily_briefing.summary()),
         SimpleSensor(coordinator, core, "Finance Summary", "finance_summary", "mdi:cash-multiple", lambda c: c.finance.summary().get("status"), lambda c: c.finance.summary()),
         SimpleSensor(coordinator, core, "Weather Context", "weather_context", "mdi:weather-cloudy-clock", lambda c: c.weather.summary().get("status"), _weather_context_attributes),
+        SimpleSensor(coordinator, core, "Local Weather Observation", "local_weather_observation", "mdi:home-thermometer-outline", lambda c: _local_weather_observation_attributes(c).get("status"), _local_weather_observation_attributes),
         WeatherStatisticsSensor(coordinator, core, "Weather Statistics", "weather_statistics", "mdi:weather-cloudy-clock", lambda c: c.weather_history.summary().get("status"), lambda c: c.weather_history.summary()),
         ForecastSensor(coordinator, core, "Forecast", "forecast", "mdi:weather-partly-cloudy", lambda c: c.forecast.summary().get("status"), lambda c: {k: c.forecast.summary().get(k) for k in ("method", "confidence", "confidence_label", "confidence_factors", "forecast_quality", "solar_range_next_24h", "solar_range_following_24h", "forecast_curve_24h", "surplus_windows", "risk_flags", "weather", "raw_expected_solar_next_24h_kwh", "raw_expected_solar_following_24h_kwh", "expected_solar_next_24h_kwh", "expected_solar_following_24h_kwh", "adaptive_correction", "expected_consumption_next_24h_kwh", "expected_consumption_following_24h_kwh", "expected_grid_import_next_24h_kwh", "expected_grid_export_next_24h_kwh", "projected_battery_soc_24h_percent", "projected_battery_soc_48h_percent", "daily_forecast", "forecast_horizon_hours", "rolling_horizon", "rolling_horizon_started_at", "best_surplus_window", "recommendations", "summary", "limitations", "safety", "recorder_safe")}),
         SimpleSensor(coordinator, core, "Optimizer Preview", "optimizer_preview", "mdi:lightbulb-on-outline", lambda c: c.optimizer.summary().get("status"), lambda c: c.optimizer.summary()),

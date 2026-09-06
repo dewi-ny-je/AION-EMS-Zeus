@@ -56,6 +56,8 @@ from .const import (
     SERVICE_CLEAR_ENTITY_MAPPING,
     SERVICE_SAVE_WEATHER_SOURCE,
     SERVICE_CLEAR_WEATHER_SOURCE,
+    SERVICE_SAVE_LOCAL_WEATHER_STATION,
+    SERVICE_CLEAR_LOCAL_WEATHER_STATION,
     SERVICE_SAVE_TARIFF_SETTINGS,
     SERVICE_CLEAR_TARIFF_SETTINGS,
     SERVICE_SET_ENERGY_PRICES,
@@ -105,6 +107,7 @@ async def _refresh_aion_entities(hass: HomeAssistant) -> None:
                 "sensor.aion_ems_zeus_update_engine",
                 "sensor.aion_ems_zeus_historical_analytics",
                 "sensor.aion_ems_zeus_forecast",
+                "sensor.aion_ems_zeus_local_weather_observation",
                 "sensor.aion_ems_zeus_optimizer_preview",
                 "sensor.aion_ems_zeus_scheduler_preview",
                 "sensor.aion_ems_zeus_qa_diagnostics",
@@ -986,6 +989,51 @@ async def async_setup_services(hass: HomeAssistant) -> None:
         await _refresh_aion_entities(hass)
 
 
+    async def save_local_weather_station(call: ServiceCall) -> None:
+        """Save optional local on-site weather observation entities."""
+        core = _core(hass)
+        fields = (
+            "temperature", "humidity", "pressure", "wind_speed", "wind_gust",
+            "wind_direction", "rain_rate", "rain_total", "solar_radiation",
+            "illuminance", "uv_index",
+        )
+        entities: dict[str, str] = {}
+        for field in fields:
+            entity_id = str(call.data.get(field) or "").strip()
+            if not entity_id:
+                continue
+            state = hass.states.get(entity_id)
+            if state is None or not entity_id.startswith("sensor."):
+                raise vol.Invalid(f"{field} must be a valid sensor.* entity")
+            entities[field] = entity_id
+        if not entities:
+            raise vol.Invalid("At least one local weather sensor is required")
+        core.registry.data.setdefault("sources", {})["local_weather_station"] = {
+            "enabled": True,
+            "name": str(call.data.get("name") or "Local Weather Station").strip()[:80],
+            "entities": entities,
+            "saved_at": __import__("datetime").datetime.now(__import__("datetime").timezone.utc).isoformat(),
+        }
+        core.registry.data.setdefault("audit", []).append({
+            "action": "save_local_weather_station",
+            "name": core.registry.data["sources"]["local_weather_station"]["name"],
+            "mapped_fields": sorted(entities),
+        })
+        await core.registry.async_save()
+        core.refresh_pipeline()
+        await _refresh_aion_entities(hass)
+
+    async def clear_local_weather_station(call: ServiceCall) -> None:
+        core = _core(hass)
+        core.registry.data.setdefault("sources", {})["local_weather_station"] = {
+            "enabled": False, "name": "", "entities": {}
+        }
+        core.registry.data.setdefault("audit", []).append({"action": "clear_local_weather_station"})
+        await core.registry.async_save()
+        core.refresh_pipeline()
+        await _refresh_aion_entities(hass)
+
+
     async def save_tariff_settings(call: ServiceCall) -> None:
         import json
         core = _core(hass)
@@ -1407,6 +1455,26 @@ async def async_setup_services(hass: HomeAssistant) -> None:
     hass.services.async_register(DOMAIN, SERVICE_CLEAR_ENTITY_MAPPING, clear_entity_mapping, schema=vol.Schema({vol.Required("field"): vol.In(list(_core(hass).energy_mapping.FIELD_RULES))}))
     hass.services.async_register(DOMAIN, SERVICE_SAVE_WEATHER_SOURCE, save_weather_source, schema=vol.Schema({vol.Required("entity_id"): cv.entity_id}))
     hass.services.async_register(DOMAIN, SERVICE_CLEAR_WEATHER_SOURCE, clear_weather_source)
+    hass.services.async_register(
+        DOMAIN,
+        SERVICE_SAVE_LOCAL_WEATHER_STATION,
+        save_local_weather_station,
+        schema=vol.Schema({
+            vol.Optional("name", default="Local Weather Station"): cv.string,
+            vol.Optional("temperature"): cv.entity_id,
+            vol.Optional("humidity"): cv.entity_id,
+            vol.Optional("pressure"): cv.entity_id,
+            vol.Optional("wind_speed"): cv.entity_id,
+            vol.Optional("wind_gust"): cv.entity_id,
+            vol.Optional("wind_direction"): cv.entity_id,
+            vol.Optional("rain_rate"): cv.entity_id,
+            vol.Optional("rain_total"): cv.entity_id,
+            vol.Optional("solar_radiation"): cv.entity_id,
+            vol.Optional("illuminance"): cv.entity_id,
+            vol.Optional("uv_index"): cv.entity_id,
+        }),
+    )
+    hass.services.async_register(DOMAIN, SERVICE_CLEAR_LOCAL_WEATHER_STATION, clear_local_weather_station)
     hass.services.async_register(DOMAIN, SERVICE_SAVE_HOME_PROFILE, save_home_profile, schema=vol.Schema({
         vol.Optional("owner_name", default=""): cv.string,
         vol.Optional("home_name", default="Home"): cv.string,

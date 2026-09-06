@@ -822,7 +822,7 @@ class AionEmsEnergyFlowDashboard extends HTMLElement {
       topology:[...live,'sensor.aion_ems_zeus_energy_topology'],flow:live,kiosk:[...live,'sensor.aion_ems_zeus_device_analytics'],
       hyper_analytics:[...live,'sensor.aion_ems_zeus_historical_analytics','sensor.aion_ems_zeus_historical_chart_data','sensor.aion_ems_zeus_hyper_analytics','sensor.aion_ems_zeus_observation_knowledge','sensor.aion_ems_zeus_reasoning_explain','sensor.aion_ems_zeus_zeus_brain','sensor.aion_ems_zeus_finance_summary','sensor.aion_ems_zeus_forecast','sensor.aion_ems_zeus_device_analytics'],
       finance:['sensor.aion_ems_zeus_finance_summary','sensor.aion_ems_zeus_grid_cost_today','sensor.aion_ems_zeus_export_revenue_today','sensor.aion_ems_zeus_solar_value_today','sensor.aion_ems_zeus_net_benefit_today'],
-      forecast:['sensor.aion_ems_zeus_forecast','sensor.aion_ems_zeus_forecast_today','sensor.aion_ems_zeus_forecast_tomorrow','sensor.aion_ems_zeus_predictive_battery'],
+      forecast:[...live,'sensor.aion_ems_zeus_forecast','sensor.aion_ems_zeus_forecast_today','sensor.aion_ems_zeus_forecast_tomorrow','sensor.aion_ems_zeus_predictive_battery','sensor.aion_ems_zeus_weather_context','sensor.aion_ems_zeus_local_weather_observation'],
       planning:[...live,'sensor.aion_ems_zeus_predictive_battery','sensor.aion_ems_zeus_learning_preview','sensor.aion_ems_zeus_planning_engine','sensor.aion_ems_zeus_forecast','sensor.aion_ems_zeus_finance_summary','sensor.aion_ems_zeus_daily_briefing','sensor.aion_ems_zeus_historical_analytics','sensor.aion_ems_zeus_historical_chart_data','sensor.aion_ems_zeus_intelligence_engine','sensor.aion_ems_zeus_device_analytics','sensor.aion_ems_zeus_device_energy_attribution'],
       energy_plan:[...live,'sensor.aion_ems_zeus_predictive_battery','sensor.aion_ems_zeus_learning_preview','sensor.aion_ems_zeus_planning_engine','sensor.aion_ems_zeus_forecast','sensor.aion_ems_zeus_finance_summary','sensor.aion_ems_zeus_daily_briefing','sensor.aion_ems_zeus_historical_analytics','sensor.aion_ems_zeus_historical_chart_data','sensor.aion_ems_zeus_intelligence_engine','sensor.aion_ems_zeus_device_analytics','sensor.aion_ems_zeus_device_energy_attribution'],
       planning_battery:[...live,'sensor.aion_ems_zeus_predictive_battery','sensor.aion_ems_zeus_learning_preview','sensor.aion_ems_zeus_forecast'],
@@ -839,7 +839,8 @@ class AionEmsEnergyFlowDashboard extends HTMLElement {
       settings:['sensor.aion_ems_zeus_registry_summary','sensor.aion_ems_zeus_settings_api'],
       health:['sensor.aion_ems_zeus_data_quality','sensor.aion_ems_zeus_qa_diagnostics','sensor.aion_ems_zeus_registry_summary','sensor.aion_ems_zeus_energy_mapping'],
       performance:['sensor.aion_ems_zeus_performance_diagnostics','sensor.aion_ems_zeus_platform_status','sensor.processor_use','sensor.processor_temperature','sensor.memory_use_percent'],
-      weather_statistics:['sensor.aion_ems_zeus_weather_statistics','sensor.aion_ems_zeus_weather_context','sensor.aion_ems_zeus_historical_analytics','sensor.aion_ems_zeus_historical_chart_data'],
+      weather_statistics:['sensor.aion_ems_zeus_weather_statistics','sensor.aion_ems_zeus_weather_context','sensor.aion_ems_zeus_local_weather_observation','sensor.aion_ems_zeus_historical_analytics','sensor.aion_ems_zeus_historical_chart_data'],
+      weather_setup:['sensor.aion_ems_zeus_weather_context','sensor.aion_ems_zeus_local_weather_observation'],
       switch_hub:[...live,'sensor.aion_ems_zeus_switch_hub']
     };
     this._pageEntityIdCache={groups,fallback:[...live,'sensor.aion_ems_zeus_registry_summary']};
@@ -1203,6 +1204,7 @@ class AionEmsEnergyFlowDashboard extends HTMLElement {
       discovery:{label:'Plugins',icon:'mdi:puzzle-plus-outline',section:'system',renderer:'integrationsPage',note:'Discover and review supported plugins'},
       rooms_groups:{label:'Rooms and Groups',icon:'mdi:floor-plan',section:'system',renderer:'roomsPage',note:'Organize the physical home'},
       sources:{label:'Energy Sources',icon:'mdi:database-cog-outline',section:'system',renderer:'sourcesPage',note:'Trusted power and energy mappings'},
+      weather_setup:{label:'Weather Sources',icon:'mdi:weather-partly-cloudy',section:'system',renderer:'weatherSetupPage',note:'Regional forecast source and on-site weather station mappings'},
       diagnostics:{label:'Diagnostics',icon:'mdi:stethoscope',section:'system',renderer:'diagnosticsCenterPage',note:'Read-only Energy Flow, Smart Control and system evidence'},
       switch_hub:{label:'Switch Hub',icon:'mdi:toggle-switch-variant',section:'system',renderer:'switchHubPage',note:'Solar-surplus and time control for Home Assistant switches'},
       home:{alias:'daily_report'},home_overview:{alias:'daily_report'},
@@ -1249,7 +1251,7 @@ class AionEmsEnergyFlowDashboard extends HTMLElement {
   navigationSections(){return [
     {id:'statistics',label:'Zeus Intelligence',icon:'mdi:brain',pages:['intelligence_center','device_intelligence','battery_statistics','mission_memory']},
     {id:'status',label:'System',icon:'mdi:cog-outline',pages:['knowledge','health','system_health','planning_results','planning_learning','planning_behavior']},
-    {id:'system',label:'Manage',icon:'mdi:cog-outline',pages:['settings','device_manager','registered_devices','discovery','rooms_groups','sources','diagnostics','switch_hub']}
+    {id:'system',label:'Manage',icon:'mdi:cog-outline',pages:['settings','device_manager','registered_devices','discovery','rooms_groups','sources','weather_setup','diagnostics','switch_hub']}
   ];}
   resolvePageDefinition(pageId){
     const registry=this.pageRegistry();let id=pageId||'daily_report',seen=new Set();
@@ -1275,17 +1277,70 @@ class AionEmsEnergyFlowDashboard extends HTMLElement {
     requestAnimationFrame(()=>{const content=this.querySelector('.content');if(content)content.scrollTop=this._contentScrollByPage.get(this._page)||0;});
     return true;
   }
+  homeAssistantDefaultTarget(){
+    const clean=value=>{
+      const raw=String(value||'').trim();
+      if(!raw)return '';
+      if(raw.startsWith('/'))return raw;
+      return `/${raw.replace(/^\/+/, '')}`;
+    };
+    // Home Assistant/frontend builds expose the preferred/default panel in
+    // different places. Use it when available, but never hard-code Overview.
+    const direct=[
+      this._hass?.defaultPanel,
+      this._hass?.default_panel,
+      this._hass?.user?.defaultPanel,
+      this._hass?.user?.default_panel,
+      this._hass?.config?.defaultPanel,
+      this._hass?.config?.default_panel
+    ].map(clean).find(Boolean);
+    if(direct)return direct;
+
+    // Some frontend versions persist the user's selected default panel.
+    try{
+      for(const key of ['defaultPanel','default_panel','lovelace.defaultPanel','home-assistant-default-panel']){
+        const stored=clean(localStorage.getItem(key));
+        if(stored)return stored;
+      }
+    }catch(_e){}
+
+    // Final HA-aware fallback: choose an available Lovelace/dashboard panel
+    // from hass.panels instead of forcing /lovelace or Overview.
+    const panels=this._hass?.panels&&typeof this._hass.panels==='object'?this._hass.panels:{};
+    const rows=Object.entries(panels).map(([key,panel])=>({
+      key:String(key||''),
+      url:String(panel?.url_path||panel?.urlPath||key||''),
+      component:String(panel?.component_name||panel?.componentName||'').toLowerCase(),
+      title:String(panel?.title||panel?.config?.title||'')
+    })).filter(row=>row.url&&row.url!=='aion-ems'&&!row.url.startsWith('aion-ems-'));
+    const dashboard=rows.find(row=>row.component.includes('lovelace'))||
+                    rows.find(row=>/lovelace|dashboard/i.test(`${row.url} ${row.title}`))||
+                    rows[0];
+    return dashboard?clean(dashboard.url):'/';
+  }
   exitToHomeAssistant(){
     this._mobileNavOpen=false;
-    const target='/lovelace';
-    try{
-      window.history.pushState(null,'',target);
-      window.dispatchEvent(new Event('location-changed'));
-      return true;
-    }catch(_e){
-      try{window.location.assign(target);}catch(_ignored){}
-      return false;
+    const zeusPath=String(window.location?.pathname||'');
+    const isZeusPath=path=>/^\/aion-ems(?:\/|$)|^\/aion-ems-zeus-kiosk(?:\/|$)|^\/aion-ems-energy-flow(?:\/|$)/.test(String(path||''));
+    const fallback=()=>{const target=this.homeAssistantDefaultTarget();try{window.history.pushState(null,'',target);window.dispatchEvent(new Event('location-changed'));return true;}catch(_e){try{window.location.assign(target);return true;}catch(_ignored){return false;}}};
+
+    // Colm UX fix: first return to the actual HA view that launched Zeus.
+    // Home Assistant panel navigation normally creates a browser-history entry,
+    // so this preserves the user's own dashboard instead of forcing Overview.
+    if(window.history.length>1){
+      try{
+        window.history.back();
+        // If there was no usable HA history entry (for example Zeus was opened
+        // directly), fall back to the user's/default HA panel after navigation
+        // has had time to settle.
+        window.setTimeout(()=>{
+          const path=String(window.location?.pathname||'');
+          if(path===zeusPath||isZeusPath(path))fallback();
+        },700);
+        return true;
+      }catch(_e){}
     }
+    return fallback();
   }
   renderRegisteredPage(pageId=this._page){
     const resolved=this.resolvePageDefinition(pageId),definition=resolved.definition;
@@ -2671,7 +2726,7 @@ class AionEmsEnergyFlowDashboard extends HTMLElement {
   commandCenterPage(){
     const n=(v,d=0)=>{const x=Number(v);return Number.isFinite(x)?x:d;};
     const today=this.periodData('today')||{}, quality=this.s('sensor.aion_ems_zeus_data_quality')?.attributes||{}, health=this.s('sensor.aion_ems_zeus_system_health')?.attributes||{}, forecast=this.s('sensor.aion_ems_zeus_forecast')?.attributes||{}, accuracy=this.s('sensor.aion_ems_zeus_prediction_accuracy')?.attributes||{}, learning=this.s('sensor.aion_ems_zeus_learning_intelligence')?.attributes||this.s('sensor.aion_ems_zeus_learning_preview')?.attributes||{}, weather=this.s('sensor.aion_ems_zeus_weather_context')?.attributes||{}, efficiency=this.s('sensor.aion_ems_zeus_home_efficiency')?.attributes||{}, seasonal=this.s('sensor.aion_ems_zeus_seasonal_analysis','sensor.aion_ems_zeus_energy_topology')?.attributes||{}, predictiveBattery=this.s('sensor.aion_ems_zeus_predictive_battery')?.attributes||{}, finance=this.s('sensor.aion_ems_zeus_finance_summary')?.attributes||{}, now=new Date();
-    const zeusVersion=String(this.s('sensor.aion_ems_zeus_platform_status')?.attributes?.version||'15.0.49').replace(/^v/i,'');
+    const zeusVersion=String(this.s('sensor.aion_ems_zeus_platform_status')?.attributes?.version||'15.0.54').replace(/^v/i,'');
     const control=this.s('sensor.aion_ems_zeus_smart_control_safety')?.attributes||{};
     const solar=Math.max(0,n(this.value('sensor.aion_ems_zeus_solar_power'))),home=Math.max(0,n(this.value('sensor.aion_ems_zeus_house_power'))),imp=Math.max(0,n(this.value('sensor.aion_ems_zeus_grid_import_power'))),exp=Math.max(0,n(this.value('sensor.aion_ems_zeus_grid_export_power'))),ch=Math.max(0,n(this.value('sensor.aion_ems_zeus_battery_charge_power'))),dis=Math.max(0,n(this.value('sensor.aion_ems_zeus_battery_discharge_power')));
     const isLoadDevice=d=>{if(d?.hybrid_inverter===true)return false;const text=[d?.type,d?.category,d?.role,d?.device_class,d?.name,d?.manufacturer,d?.model].filter(Boolean).join(' ').toLowerCase();const sourceTypes=['solar','photovoltaic','pv','inverter','fronius symo','fronius hybrid','battery inverter','smart meter','grid meter','energy meter','power meter','meter'];return !sourceTypes.some(x=>text.includes(x));};
@@ -3053,7 +3108,7 @@ class AionEmsEnergyFlowDashboard extends HTMLElement {
     const control=this.s('sensor.aion_ems_zeus_smart_control_safety')?.attributes||{};
     const qa=this.s('sensor.aion_ems_zeus_qa_diagnostics')?.attributes||{};
     const perf=this.s('sensor.aion_ems_zeus_performance_diagnostics')?.attributes||{};
-    const version=String(platform.version||'15.0.49').replace(/^v/i,'');
+    const version=String(platform.version||'15.0.54').replace(/^v/i,'');
     const source=flow.source_snapshot&&typeof flow.source_snapshot==='object'?flow.source_snapshot:{};
     const sourceKeys=['solar_power','grid_import_power','grid_export_power','battery_charge_power','battery_discharge_power','grid_power','battery_power'];
     const sources={};
@@ -3063,7 +3118,7 @@ class AionEmsEnergyFlowDashboard extends HTMLElement {
     const simulations=(Array.isArray(control.simulations)?control.simulations:[]).map(x=>({device_id:x.device_id||null,allowed:x.allowed,reason:x.reason||null,requested_power_w:x.requested_power_w??null,live:x.live?{surplus_w:x.live.surplus_w??null,boiler_temperature_c:x.live.boiler_temperature_c??null,element_temperature_c:x.live.element_temperature_c??null}:null,execution:x.execution?{status:x.execution.status||null,active:x.execution.active,last_value_w:x.execution.last_value_w??null,last_write_at:x.execution.last_write_at||null,last_error:x.execution.last_error||null,interlocks:Array.isArray(x.execution.interlocks)?x.execution.interlocks:[]}:null}));
     const goe=(((control.goe_mqtt||{}).devices)||[]).map(x=>({device_id:x.device_id||null,active:!!x.active,topic:x.topic||null,grid_power_entity:x.grid_power_entity||null,last_publish_at:x.last_publish_at||null,last_error:x.last_error||null}));
     const checks=Array.isArray(qa.checks)?qa.checks.slice(0,50).map(x=>({category:x.category||x.area||null,name:x.name||x.check||x.title||null,status:x.status||x.result||null,message:x.message||x.detail||null})):[];
-    const report={report_schema:'aion_ems_zeus_diagnostic_report_v1',generated_at:new Date().toISOString(),privacy:'No credentials, passwords, access tokens, MQTT credentials, NAS server addresses or secret connection data are included.',system:{zeus_version:version,frontend_version:'15.0.49',registered_devices:devices.length,performance:perf.status||perf.mode||null,recorder_attribute_limit_bytes:16384,energy_flow_recorder_protected:true},energy_flow:{status:flowRoot.status||flowState?.state||null,snapshot_completed:flow.snapshot_completed||flow.flow_snapshot_completed||flow.snapshot_timestamp||flow.last_updated||null,update_latency_ms:flowRoot.update_latency_ms??flow.update_latency_ms??perf.update_latency_ms??'unavailable',source_skew_ms:flow.source_skew_ms??null,house_power_w:this.value('sensor.aion_ems_zeus_house_power'),solar_power_w:this.value('sensor.aion_ems_zeus_solar_power'),grid_import_power_w:this.value('sensor.aion_ems_zeus_grid_import_power'),grid_export_power_w:this.value('sensor.aion_ems_zeus_grid_export_power'),battery_charge_power_w:this.value('sensor.aion_ems_zeus_battery_charge_power'),battery_discharge_power_w:this.value('sensor.aion_ems_zeus_battery_discharge_power'),sources},registered_devices:devices,smart_control:{execution_path:control.execution_path||null,registered_devices:control.registered_devices??devices.length,controllable_candidates:control.controllable_candidates??null,permissioned_candidates:control.permissioned_candidates??null,devices:focused,simulations,goe_mqtt:goe},self_test:{status:qa.status||'Not run',score:qa.score??null,grade:qa.grade||null,passed:qa.passed_count??null,warnings:qa.warning_count??null,errors:qa.error_count??null,checks}}; return this._sanitizeDiagnosticExport(report);
+    const report={report_schema:'aion_ems_zeus_diagnostic_report_v1',generated_at:new Date().toISOString(),privacy:'No credentials, passwords, access tokens, MQTT credentials, NAS server addresses or secret connection data are included.',system:{zeus_version:version,frontend_version:'15.0.54',registered_devices:devices.length,performance:perf.status||perf.mode||null,recorder_attribute_limit_bytes:16384,energy_flow_recorder_protected:true},energy_flow:{status:flowRoot.status||flowState?.state||null,snapshot_completed:flow.snapshot_completed||flow.flow_snapshot_completed||flow.snapshot_timestamp||flow.last_updated||null,update_latency_ms:flowRoot.update_latency_ms??flow.update_latency_ms??perf.update_latency_ms??'unavailable',source_skew_ms:flow.source_skew_ms??null,house_power_w:this.value('sensor.aion_ems_zeus_house_power'),solar_power_w:this.value('sensor.aion_ems_zeus_solar_power'),grid_import_power_w:this.value('sensor.aion_ems_zeus_grid_import_power'),grid_export_power_w:this.value('sensor.aion_ems_zeus_grid_export_power'),battery_charge_power_w:this.value('sensor.aion_ems_zeus_battery_charge_power'),battery_discharge_power_w:this.value('sensor.aion_ems_zeus_battery_discharge_power'),sources},registered_devices:devices,smart_control:{execution_path:control.execution_path||null,registered_devices:control.registered_devices??devices.length,controllable_candidates:control.controllable_candidates??null,permissioned_candidates:control.permissioned_candidates??null,devices:focused,simulations,goe_mqtt:goe},self_test:{status:qa.status||'Not run',score:qa.score??null,grade:qa.grade||null,passed:qa.passed_count??null,warnings:qa.warning_count??null,errors:qa.error_count??null,checks}}; return this._sanitizeDiagnosticExport(report);
   }
   _sanitizeDiagnosticExport(value){
     if(value==null) return value;
@@ -3194,7 +3249,7 @@ class AionEmsEnergyFlowDashboard extends HTMLElement {
     const platform=this.s('sensor.aion_ems_zeus_platform_status')?.attributes||{};
     const qa=this.s('sensor.aion_ems_zeus_qa_diagnostics')?.attributes||{};
     const perf=this.s('sensor.aion_ems_zeus_performance_diagnostics')?.attributes||{};
-    const version=String(platform.version||'15.0.49').replace(/^v/i,'');
+    const version=String(platform.version||'15.0.54').replace(/^v/i,'');
     const sourceSnapshot=flow.source_snapshot&&typeof flow.source_snapshot==='object'?flow.source_snapshot:{};
     const fmtTs=v=>{if(!v)return '—';try{return new Date(v).toLocaleString();}catch(_e){return String(v)}};
     const fmtVal=v=>{const n=Number(v);return Number.isFinite(n)?this.watts(n):'—';};
@@ -7133,6 +7188,7 @@ class AionEmsEnergyFlowDashboard extends HTMLElement {
 
   intelligencePage(){
     const f=this.s('sensor.aion_ems_zeus_forecast')?.attributes||{},accuracy=this.s('sensor.aion_ems_zeus_prediction_accuracy')?.attributes||{},planning=this.s('sensor.aion_ems_zeus_planning_engine')?.attributes||{},learning=planning.learning||{},adaptive=f.adaptive_correction||{},days=Array.isArray(f.daily_forecast)?f.daily_forecast:[],curve=Array.isArray(f.forecast_curve_24h)?f.forecast_curve_24h:[],windows=Array.isArray(f.surplus_windows)?f.surplus_windows:[],risks=Array.isArray(f.risk_flags)?f.risk_flags:[],q=f.forecast_quality||{},range=f.solar_range_next_24h||{},range2=f.solar_range_following_24h||{},weather=f.weather||{};
+    const regionalWeather=this.s('sensor.aion_ems_zeus_weather_context')?.attributes||{},localWeather=this.s('sensor.aion_ems_zeus_local_weather_observation')?.attributes||{},localObs=localWeather.observations||{};
     const n=(v,d=null)=>{const x=Number(v);return Number.isFinite(x)?x:d},pct=v=>n(v)==null?'Collecting':`${n(v).toFixed(0)}%`,quality=n(q.score,n(f.confidence,0)),qLabel=q.label||f.confidence_label||'Collecting',maxCurve=Math.max(1,...curve.flatMap(x=>[n(x.solar_power_w,0),n(x.house_power_w,0)])),method=String(f.method||'learning').replaceAll('_',' ').replace(/\b\w/g,c=>c.toUpperCase());
     const weatherIcon=c=>{c=String(c||'').toLowerCase();return c.includes('rain')?'mdi:weather-rainy':c.includes('snow')?'mdi:weather-snowy':c.includes('cloud')?'mdi:weather-partly-cloudy':c.includes('fog')?'mdi:weather-fog':c.includes('lightning')?'mdi:weather-lightning':'mdi:weather-sunny'};
     const rangeText=r=>r&&r.low_kwh!=null?`${Number(r.low_kwh).toFixed(1)}–${Number(r.high_kwh).toFixed(1)} kWh`:'Range collecting';
@@ -7140,10 +7196,30 @@ class AionEmsEnergyFlowDashboard extends HTMLElement {
     const dayHtml=days.length?days.map((d,idx)=>`<article class="zf-day ${idx===0?'today':''}"><div class="zf-day-head"><div><span>${this.esc(d.label||d.date)}</span><small>${this.esc(String(d.date||''))}</small></div><ha-icon icon="${weatherIcon(d.condition)}"></ha-icon></div><b>${this.kwh(d.expected_solar_kwh)}</b><div class="zf-day-range">${d.solar_range_low_kwh!=null?`${Number(d.solar_range_low_kwh).toFixed(1)}–${Number(d.solar_range_high_kwh).toFixed(1)} kWh`:'Range collecting'}</div><div class="zf-day-metrics"><span>Home <strong>${this.kwh(d.expected_consumption_kwh)}</strong></span><span>Import <strong>${this.kwh(d.expected_grid_import_kwh)}</strong></span><span>Export <strong>${this.kwh(d.expected_grid_export_kwh)}</strong></span></div><div class="zf-quality"><i style="--w:${Math.max(2,Math.min(100,n(d.quality_percent,quality)))}%"></i><small>${this.esc(d.quality_label||qLabel)} · weather ${pct(d.weather_coverage_percent)}</small></div></article>`).join(''):'<div class="empty">7-day outlook appears after Zeus collects history.</div>';
     const windowHtml=windows.length?windows.map((w,idx)=>`<div class="zf-window"><div class="zf-window-rank">${idx+1}</div><div><span>${idx===0?'BEST ENERGY WINDOW':'SURPLUS WINDOW'}</span><b>${this.esc(w.label||'—')}</b><small>${this.kwh(w.expected_surplus_energy_kwh)} predicted surplus over 2h</small></div><strong>${this.watts(w.expected_surplus_power_w)}</strong></div>`).join(''):'<div class="compact-empty"><ha-icon icon="mdi:weather-sunset"></ha-icon><div><b>No strong surplus window yet</b><p>Zeus is still collecting or the next 24 hours do not contain a supported solar surplus.</p></div></div>';
     const riskHtml=risks.length?risks.map(x=>`<div class="zf-risk ${this.esc(x.severity||'info')}"><ha-icon icon="${x.severity==='warning'?'mdi:alert-outline':'mdi:information-outline'}"></ha-icon><span>${this.esc(x.text||'')}</span></div>`).join(''):'<div class="zf-risk good"><ha-icon icon="mdi:check-circle-outline"></ha-icon><span>No material forecast evidence gaps detected.</span></div>';
+    const obsValue=field=>{const x=Number(localObs?.[field]?.value);return Number.isFinite(x)?x:null;},obsUnit=field=>String(localObs?.[field]?.unit||'');
+    const localTemp=obsValue('temperature'),localHumidity=obsValue('humidity'),localWind=obsValue('wind_speed'),localRain=obsValue('rain_rate'),localIrr=obsValue('solar_radiation');
+    const liveSolar=Math.max(0,Number(this.value('sensor.aion_ems_zeus_solar_power'))||0),nowMs=Date.now();
+    const currentCurve=curve.length?[...curve].sort((a,b)=>Math.abs((Date.parse(a.time||'')||nowMs)-nowMs)-Math.abs((Date.parse(b.time||'')||nowMs)-nowMs))[0]:null;
+    const expectedSolarNow=currentCurve?Math.max(0,Number(currentCurve.solar_power_w)||0):null;
+    const pvErrorPct=expectedSolarNow!=null&&expectedSolarNow>100?(liveSolar-expectedSolarNow)/expectedSolarNow*100:null;
+    const regionalTemp=Number.isFinite(Number(regionalWeather.temperature))?Number(regionalWeather.temperature):null,regionalHumidity=Number.isFinite(Number(regionalWeather.humidity))?Number(regionalWeather.humidity):null;
+    const tempDelta=localTemp!=null&&regionalTemp!=null?localTemp-regionalTemp:null,humidityDelta=localHumidity!=null&&regionalHumidity!=null?localHumidity-regionalHumidity:null;
+    let localAssessment='Local weather evidence is collecting.',localTone='info';
+    if(localWeather.enabled){
+      if(expectedSolarNow!=null&&expectedSolarNow>200&&pvErrorPct!=null){
+        if(pvErrorPct<-25&&localIrr!=null&&localIrr<150){localAssessment='PV production is below the current forecast while on-site irradiance is also low. Local weather evidence supports a weather-related forecast shortfall.';localTone='warning';}
+        else if(pvErrorPct<-25&&localIrr!=null&&localIrr>=400){localAssessment='PV production is below forecast despite strong on-site irradiance. Local weather alone does not explain the production gap; Zeus keeps this as performance evidence and does not assume a fault.';localTone='warning';}
+        else if(Math.abs(pvErrorPct)<=20){localAssessment='Live PV production is tracking the current forecast reasonably closely. Local station evidence is consistent with the present forecast window.';localTone='good';}
+        else if(pvErrorPct>25){localAssessment='Live PV production is above the current forecast. On-site weather observations can help Zeus learn whether regional forecast conditions were too conservative.';localTone='good';}
+      }else if(localIrr!=null){localAssessment='On-site weather is available and ready to explain future solar forecast errors as completed forecast evidence matures.';localTone='good';}
+    }
+    const deltaText=(v,suffix='')=>v==null?'—':`${v>=0?'+':''}${v.toFixed(1)}${suffix}`;
+    const localWeatherPanel=localWeather.enabled?`<article class="panel spaced zf-local-weather"><div class="section-title"><div><span>LOCAL WEATHER VERIFICATION</span><h2>Regional forecast vs on-site reality</h2></div><ha-icon icon="mdi:home-search-outline"></ha-icon></div><div class="zf-local-weather-grid"><div><span>Regional condition</span><b>${this.esc(regionalWeather.condition||'—')}</b><small>${regionalTemp==null?'Temperature unavailable':`${regionalTemp.toFixed(1)} ${this.esc(regionalWeather.temperature_unit||'°C')}`}</small></div><div><span>Local temperature</span><b>${localTemp==null?'—':`${localTemp.toFixed(1)} ${this.esc(obsUnit('temperature'))}`}</b><small>vs regional ${deltaText(tempDelta,'°')}</small></div><div><span>Local humidity</span><b>${localHumidity==null?'—':`${localHumidity.toFixed(0)} ${this.esc(obsUnit('humidity'))}`}</b><small>${humidityDelta==null?'Regional comparison unavailable':`Δ ${deltaText(humidityDelta,' pp')}`}</small></div><div><span>Local irradiance</span><b>${localIrr==null?'—':`${localIrr.toFixed(1)} ${this.esc(obsUnit('solar_radiation'))}`}</b><small>Measured at the site</small></div><div><span>Local wind / rain</span><b>${localWind==null?'—':`${localWind.toFixed(1)} ${this.esc(obsUnit('wind_speed'))}`}</b><small>${localRain==null?'Rain unavailable':`Rain ${localRain.toFixed(1)} ${this.esc(obsUnit('rain_rate'))}`}</small></div><div><span>PV forecast now</span><b>${expectedSolarNow==null?'—':this.watts(expectedSolarNow)}</b><small>Actual ${this.watts(liveSolar)}${pvErrorPct==null?'':` · Δ ${pvErrorPct>=0?'+':''}${pvErrorPct.toFixed(0)}%`}</small></div></div><div class="zf-local-assessment ${localTone}"><ha-icon icon="${localTone==='warning'?'mdi:weather-cloudy-alert':'mdi:check-decagram-outline'}"></ha-icon><p>${this.esc(localAssessment)}</p></div><p class="data-note">On-site station data is measured evidence. It verifies and explains forecast performance but never silently replaces the regional/online forecast authority.</p></article>`:'';
     return `<section class="page forecast-page zf-page"><div class="page-head zf-head"><div><span>ZEUS FORECAST INTELLIGENCE</span><h1>Energy Forecast</h1><p>Weather, local history and measured forecast trust combined into one evidence-aware energy outlook.</p></div><div class="badge">Recommendation only</div></div>
     <section class="zf-hero panel"><div class="zf-hero-main"><span>NEXT 24 HOURS · SOLAR</span><h2>${this.kwh(f.expected_solar_next_24h_kwh)}</h2><p>Planning range ${this.esc(rangeText(range))}</p><div class="zf-hero-flow"><span>Home <b>${this.kwh(f.expected_consumption_next_24h_kwh)}</b></span><span>Grid import <b>${this.kwh(f.expected_grid_import_next_24h_kwh)}</b></span><span>Grid export <b>${this.kwh(f.expected_grid_export_next_24h_kwh)}</b></span><span>Battery 24h <b>${f.projected_battery_soc_24h_percent==null?'—':Number(f.projected_battery_soc_24h_percent).toFixed(0)+'%'}</b></span></div></div><div class="zf-score"><div class="zf-score-ring" style="--score:${Math.max(0,Math.min(100,quality))}"><strong>${quality.toFixed(0)}%</strong><span>${this.esc(qLabel)} quality</span></div><small>${this.esc(method)}</small></div></section>
     <div class="zf-kpis"><article class="panel"><span>FOLLOWING 24H SOLAR</span><b>${this.kwh(f.expected_solar_following_24h_kwh)}</b><small>${this.esc(rangeText(range2))}</small></article><article class="panel"><span>WEATHER COVERAGE · 24H</span><b>${pct(q.weather_coverage_next_24h_percent)}</b><small>${this.esc(weather.forecast_granularity||'forecast')} weather evidence</small></article><article class="panel"><span>FORWARD-MATCHED TRUST</span><b>${q.measured_forward_trust_percent==null?'Collecting':Number(q.measured_forward_trust_percent).toFixed(0)+'%'}</b><small>${this.esc(q.forward_match_count??0)} matured matches</small></article><article class="panel"><span>HISTORY COVERAGE · 24H</span><b>${pct(q.history_coverage_next_24h_percent)}</b><small>Local hourly profile evidence</small></article></div>
     <article class="panel spaced zf-curve-panel"><div class="section-title"><div><span>NEXT 24 HOURS</span><h2>Solar versus home demand</h2></div><div class="zf-legend"><span><i class="solar"></i>Solar</span><span><i class="home"></i>Home</span></div></div>${curveHtml}<p class="data-note">Two-hour compact view. Forecast planning remains hourly in the backend; this chart is presentation-only.</p></article>
+    ${localWeatherPanel}
     ${this.forecastExplorerPanel(f,accuracy)}
     <div class="zf-two"><article class="panel spaced"><div class="section-title"><div><span>BEST ENERGY WINDOWS</span><h2>Where surplus is expected</h2></div><ha-icon icon="mdi:solar-power-variant-outline"></ha-icon></div><div class="zf-windows">${windowHtml}</div></article><article class="panel spaced"><div class="section-title"><div><span>FORECAST EVIDENCE</span><h2>Why Zeus believes this</h2></div><ha-icon icon="mdi:shield-search"></ha-icon></div><div class="zf-evidence"><div><span>Model confidence</span><b>${pct(q.model_confidence_percent??f.confidence)}</b></div><div><span>Measured trust</span><b>${q.measured_forward_trust_percent==null?'Collecting':pct(q.measured_forward_trust_percent)}</b></div><div><span>Weather 48h</span><b>${pct(q.weather_coverage_next_48h_percent)}</b></div><div><span>Planning band</span><b>±${n(q.uncertainty_band_percent,0).toFixed(0)}%</b></div><div><span>Adaptive correction</span><b>${adaptive.applied_correction_percent==null?'Collecting':`${Number(adaptive.applied_correction_percent)>=0?'+':''}${Number(adaptive.applied_correction_percent).toFixed(1)}%`}</b></div><div><span>Completed comparisons</span><b>${this.esc(learning.comparison_count??adaptive.completed_comparisons??0)}</b></div></div><div class="zf-risks">${riskHtml}</div><p class="data-note">${this.esc(q.range_contract||'Forecast ranges express planning uncertainty, not a guarantee.')}</p></article></div>
     <article class="panel spaced zf-week"><div class="section-title"><div><span>7-DAY ENERGY OUTLOOK</span><h2>Production, demand and grid direction</h2></div><small>Calendar-aligned local days</small></div><div class="zf-days">${dayHtml}</div></article>
@@ -7235,6 +7311,60 @@ class AionEmsEnergyFlowDashboard extends HTMLElement {
     return `<div class="energy-authority-note ${exact?'active':''}"><ha-icon icon="mdi:home-assistant"></ha-icon><div><b>Home Assistant Energy · ${derived?'matched live partner':'configured source'}</b><small>${this.esc(row.name||row.entity_id)} · ${this.esc(row.entity_id)}${row.derived_from?` · linked to ${this.esc(row.derived_from)}`:''}</small></div>${exact?`<em>In use</em>`:`<button type="button" data-use-ha-energy="${this.esc(field)}" data-entity="${this.esc(row.entity_id)}">Use this</button>`}</div>`;
   }
 
+  weatherSetupPage(){
+    const weather=this.s("sensor.aion_ems_zeus_weather_context")?.attributes||{};
+    const localWeather=this.s("sensor.aion_ems_zeus_local_weather_observation")?.attributes||{};
+    const localObs=localWeather.observations||{};
+    const weatherCandidates=(weather.candidates||[]).length?weather.candidates:Object.values(this._hass?.states||{}).filter(x=>x.entity_id.startsWith("weather.")).map(x=>({entity_id:x.entity_id,name:x.attributes?.friendly_name||x.entity_id,condition:x.state,available:!['unknown','unavailable'].includes(x.state),supported_features:x.attributes?.supported_features||0}));
+    const selectedWeather=weather.entity_id||"";
+    const localWeatherFields={
+      temperature:['Outdoor temperature',['temperature'],['°C','°F']],
+      humidity:['Humidity',['humidity'],['%']],
+      pressure:['Barometric pressure',['pressure'],['hPa','mbar','Pa','kPa']],
+      wind_speed:['Wind speed',['speed'],['km/h','m/s','mph','kn']],
+      wind_gust:['Wind gust',['speed'],['km/h','m/s','mph','kn']],
+      wind_direction:['Wind direction',[],['°','deg']],
+      rain_rate:['Rain rate',['precipitation_intensity'],['mm/h','in/h']],
+      rain_total:['Rain total',['precipitation'],['mm','in']],
+      solar_radiation:['Solar radiation / irradiance',['irradiance'],['W/m²','W/m2']],
+      illuminance:['Illuminance',['illuminance'],['lx']],
+      uv_index:['UV index',[],['UV index','']]
+    };
+    const localSensorOptions=(field)=>{
+      const current=localObs?.[field]?.entity_id||'';
+      const [,classes,units]=localWeatherFields[field];
+      let rows=Object.values(this._hass?.states||{}).filter(st=>st?.entity_id?.startsWith('sensor.')&&!st.entity_id.startsWith('sensor.aion_ems_zeus_')).filter(st=>{
+        const dc=String(st.attributes?.device_class||''),unit=String(st.attributes?.unit_of_measurement||'');
+        const search=`${st.entity_id} ${st.attributes?.friendly_name||''}`.toLowerCase().replaceAll('_',' ');
+        if(classes.length&&classes.includes(dc))return true;
+        if(units.length&&units.includes(unit))return true;
+        const tokens={
+          temperature:['outdoor','outside','temperature','temp'],
+          humidity:['humidity'],
+          pressure:['pressure','barometer'],
+          wind_speed:['wind speed','windspeed'],
+          wind_gust:['gust'],
+          wind_direction:['wind direction','wind dir'],
+          rain_rate:['rain rate','precipitation rate'],
+          rain_total:['rain total','daily rain','rainfall'],
+          solar_radiation:['solar radiation','irradiance','radiation'],
+          illuminance:['illuminance','lux'],
+          uv_index:['uv index','uvi']
+        }[field]||[];
+        return tokens.some(t=>search.includes(t));
+      }).sort((a,b)=>String(a.attributes?.friendly_name||a.entity_id).localeCompare(String(b.attributes?.friendly_name||b.entity_id)));
+      if(current&&!rows.some(st=>st.entity_id===current)){const st=this.s(current);if(st)rows.unshift(st);}
+      return `<option value="">Not mapped</option>${rows.map(st=>`<option value="${this.esc(st.entity_id)}" ${st.entity_id===current?'selected':''}>${this.esc(st.attributes?.friendly_name||st.entity_id)} · ${this.esc(st.entity_id)}${st.attributes?.unit_of_measurement?` · ${this.esc(st.attributes.unit_of_measurement)}`:''}</option>`).join('')}`;
+    };
+    return `<section class="page weather-setup-page">
+      <div class="page-head"><div><span>MANAGE · WEATHER SOURCES</span><h1>Weather Sources</h1><p>Configure the forward-looking regional forecast and measured on-site weather sources used by Zeus.</p></div><div class="badge">${localWeather.enabled?'Local station connected':'Forecast + optional local station'}</div></div>
+      <article class="panel"><div class="section-title"><div><span>WEATHER MODEL</span><h2>Two independent evidence sources</h2></div><ha-icon icon="mdi:weather-partly-cloudy"></ha-icon></div><div class="weather-role-grid"><div><ha-icon icon="mdi:cloud-clock-outline"></ha-icon><span>Regional / online</span><b>Forecast authority</b><small>What is expected to happen. Used for planning and future outlook.</small></div><div><ha-icon icon="mdi:home-thermometer-outline"></ha-icon><span>On-site station</span><b>Measured reality</b><small>What is actually happening at the house. Used for verification and learning.</small></div></div><p class="configuration-note"><b>Evidence rule:</b> local station measurements never silently replace the regional forecast. Zeus keeps prediction and observation as different evidence types.</p></article>
+      <article class="panel spaced"><div class="section-title"><div><span>WEATHER FORECAST</span><h2>Regional / online forecast source</h2></div><ha-icon icon="mdi:weather-partly-cloudy"></ha-icon></div><p class="configuration-note">Forward-looking weather authority used for forecast and planning. Local station observations below remain separate measured evidence.</p><label class="source-label">Weather Entity<select id="weather-source"><option value="">Select a weather entity…</option>${weatherCandidates.map(x=>`<option value="${this.esc(x.entity_id)}" ${x.entity_id===selectedWeather?'selected':''}>${this.esc(x.name)} · ${this.esc(x.entity_id)}</option>`).join('')}</select></label><div class="source-status"><div><span>Status</span><b>${weather.available?'Connected':'Waiting'}</b></div><div><span>Current condition</span><b>${this.esc(weather.condition||'—')}</b></div><div><span>Temperature</span><b>${weather.temperature==null?'—':`${weather.temperature} ${this.esc(weather.temperature_unit||'')}`}</b></div><div><span>Forecast</span><b>${weather.forecast_available?'Available':'Current data only'}</b></div></div><div class="buttons"><button id="save-weather" class="primary-button">Save Forecast Source</button><button id="clear-weather">Clear</button></div></article>
+      <article class="panel spaced"><div class="section-title"><div><span>LOCAL WEATHER STATION · OPTIONAL</span><h2>On-site measured weather</h2></div><ha-icon icon="mdi:home-thermometer-outline"></ha-icon></div><p class="configuration-note">Map the sensors your station actually provides. Zeus keeps these as measured on-site observations for verification and future forecast learning. They do not replace the regional forecast source.</p><label class="source-label">Station name<input id="local-weather-name" value="${this.esc(localWeather.name||'Local Weather Station')}" placeholder="Example: WS2900"></label><div class="source-map-grid">${Object.entries(localWeatherFields).map(([field,meta])=>`<label class="source-label"><span>${this.esc(meta[0])}</span><select data-local-weather-field="${field}">${localSensorOptions(field)}</select></label>`).join('')}</div><div class="source-status"><div><span>Status</span><b>${this.esc(localWeather.status||'Not configured')}</b></div><div><span>Mapped</span><b>${Number(localWeather.mapped_count||0)} sensors</b></div><div><span>Available now</span><b>${Number(localWeather.available_count||0)}</b></div><div><span>Solar radiation</span><b>${localWeather.solar_radiation==null?'—':`${Number(localWeather.solar_radiation).toFixed(0)} ${this.esc(localWeather.solar_radiation_unit||'')}`}</b></div></div><div class="buttons"><button id="save-local-weather" class="primary-button">Save Local Weather Station</button><button id="clear-local-weather">Clear</button></div></article>
+      <style>.weather-role-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:14px}.weather-role-grid>div{display:grid;grid-template-columns:auto 1fr;grid-template-areas:"icon role" "icon title" "icon note";column-gap:12px;padding:15px;border:1px solid var(--line);border-radius:14px;background:var(--surface2)}.weather-role-grid ha-icon{grid-area:icon;color:var(--accent2);align-self:center}.weather-role-grid span{grid-area:role;color:var(--muted);font-size:10px;text-transform:uppercase;letter-spacing:.08em}.weather-role-grid b{grid-area:title;margin:3px 0}.weather-role-grid small{grid-area:note;color:var(--muted);line-height:1.4}@media(max-width:700px){.weather-role-grid{grid-template-columns:1fr}}</style>
+    </section>`;
+  }
+
   sourcesPage(){
     if(!this._sourcesHAEnergyLoaded&&!this._sourcesHAEnergyLoading){queueMicrotask(()=>this.ensureSourcesHAEnergyAuthority());}
     const weather=this.s("sensor.aion_ems_zeus_weather_context")?.attributes||{};
@@ -7246,6 +7376,47 @@ class AionEmsEnergyFlowDashboard extends HTMLElement {
     const invalid=mappingState.invalid||Object.fromEntries((mappingState.invalid_fields||[]).map(field=>[field,true]));
     const weatherCandidates=(weather.candidates||[]).length?weather.candidates:Object.values(this._hass?.states||{}).filter(x=>x.entity_id.startsWith("weather.")).map(x=>({entity_id:x.entity_id,name:x.attributes?.friendly_name||x.entity_id,condition:x.state,available:!['unknown','unavailable'].includes(x.state),supported_features:x.attributes?.supported_features||0}));
     const selectedWeather=weather.entity_id||"";
+    const localWeather=this.s("sensor.aion_ems_zeus_local_weather_observation")?.attributes||{};
+    const localObs=localWeather.observations||{};
+    const localWeatherFields={
+      temperature:['Outdoor temperature',['temperature'],['°C','°F']],
+      humidity:['Humidity',['humidity'],['%']],
+      pressure:['Barometric pressure',['pressure'],['hPa','mbar','Pa','kPa']],
+      wind_speed:['Wind speed',['speed'],['km/h','m/s','mph','kn']],
+      wind_gust:['Wind gust',['speed'],['km/h','m/s','mph','kn']],
+      wind_direction:['Wind direction',[],['°','deg']],
+      rain_rate:['Rain rate',['precipitation_intensity'],['mm/h','in/h']],
+      rain_total:['Rain total',['precipitation'],['mm','in']],
+      solar_radiation:['Solar radiation / irradiance',['irradiance'],['W/m²','W/m2']],
+      illuminance:['Illuminance',['illuminance'],['lx']],
+      uv_index:['UV index',[],['UV index','']]
+    };
+    const localSensorOptions=(field)=>{
+      const current=localObs?.[field]?.entity_id||'';
+      const [label,classes,units]=localWeatherFields[field];
+      let rows=Object.values(this._hass?.states||{}).filter(st=>st?.entity_id?.startsWith('sensor.')&&!st.entity_id.startsWith('sensor.aion_ems_zeus_')).filter(st=>{
+        const dc=String(st.attributes?.device_class||''),unit=String(st.attributes?.unit_of_measurement||'');
+        const text=`${st.entity_id} ${st.attributes?.friendly_name||''}`.toLowerCase().replaceAll('_',' ');
+        if(classes.length&&classes.includes(dc))return true;
+        if(units.length&&units.includes(unit))return true;
+        const tokens={
+          temperature:['outdoor','outside','temperature','temp'],
+          humidity:['humidity'],
+          pressure:['pressure','barometer'],
+          wind_speed:['wind speed','windspeed'],
+          wind_gust:['gust'],
+          wind_direction:['wind direction','wind dir'],
+          rain_rate:['rain rate','precipitation rate'],
+          rain_total:['rain total','daily rain','rainfall'],
+          solar_radiation:['solar radiation','irradiance','radiation'],
+          illuminance:['illuminance','lux'],
+          uv_index:['uv index','uvi']
+        }[field]||[];
+        return tokens.some(t=>text.includes(t));
+      }).sort((a,b)=>String(a.attributes?.friendly_name||a.entity_id).localeCompare(String(b.attributes?.friendly_name||b.entity_id)));
+      if(current&&!rows.some(st=>st.entity_id===current)){const st=this.s(current);if(st)rows.unshift(st);}
+      return `<option value="">Not mapped</option>${rows.map(st=>`<option value="${this.esc(st.entity_id)}" ${st.entity_id===current?'selected':''}>${this.esc(st.attributes?.friendly_name||st.entity_id)} · ${this.esc(st.entity_id)}${st.attributes?.unit_of_measurement?` · ${this.esc(st.attributes.unit_of_measurement)}`:''}</option>`).join('')}`;
+    };
     const allStates=Object.values(this._hass?.states||{}).filter(st=>st?.entity_id?.startsWith('sensor.')&&!st.entity_id.startsWith('sensor.aion_ems_zeus_'));
     const fieldMeta={
       grid_power:['Bidirectional grid power','One signed live meter: positive import or negative export.','power',['W','kW']],
@@ -7379,7 +7550,7 @@ class AionEmsEnergyFlowDashboard extends HTMLElement {
       ${section('HOME','Home consumption','mdi:home-lightning-bolt','Map whole-home demand and exact consumption totals.',['house_power','house_energy_today','house_energy_total'],false,'home')}
       ${section('BATTERY','Battery','mdi:battery-high','State of charge is recommended. Capacity and lifetime totals are optional.',['battery_soc','battery_power','battery_charge_power','battery_discharge_power','battery_charge_energy_today','battery_discharge_energy_today','battery_charge_energy_total','battery_discharge_energy_total'],false,'battery')}
       <article class="panel spaced battery-capacity-panel"><div class="section-title"><div><span>BATTERY · OPTIONAL</span><h2>Battery profile</h2></div><ha-icon icon="mdi:battery-charging-high"></ha-icon></div><p class="configuration-note">Register the real usable battery limits Zeus should use for time-to-target, reserve, efficiency and advisory forecasting. Zeus will not substitute generic 10 kWh / 5 kW values when these are not configured.</p><div class="tariff-grid"><label>Usable capacity (kWh)<input id="battery-capacity-kwh" type="number" min="0" step="0.1" inputmode="decimal" value="${this.esc(this._wizardData?.battery_capacity||'')}" placeholder="Example: 7.2"></label><label>Max charge power (kW)<input id="battery-profile-max-charge-kw" type="number" min="0.1" step="0.1" inputmode="decimal" value="${this.esc(this._wizardData?.battery_max_charge_kw||'')}" placeholder="Example: 2.5"></label><label>Max discharge power (kW)<input id="battery-profile-max-discharge-kw" type="number" min="0.1" step="0.1" inputmode="decimal" value="${this.esc(this._wizardData?.battery_max_discharge_kw||'')}" placeholder="Example: 2.5"></label><label>Average round-trip efficiency (%)<input id="battery-profile-rte-percent" type="number" min="50" max="100" step="1" inputmode="decimal" value="${this.esc(this._wizardData?.battery_rte_percent||'')}" placeholder="Example: 82"></label><label>Minimum planning SOC (%)<input id="battery-profile-min-soc" type="number" min="0" max="99" step="1" inputmode="decimal" value="${this.esc(this._wizardData?.battery_min_soc||'20')}" placeholder="20"></label><label>Maximum planning SOC (%)<input id="battery-profile-max-soc" type="number" min="1" max="100" step="1" inputmode="decimal" value="${this.esc(this._wizardData?.battery_max_soc||'95')}" placeholder="95"></label></div><p class="configuration-note"><b>Efficiency:</b> enter the current best average RTE for planning. Zeus can later learn seasonal efficiency from measured charge/discharge evidence; the manual value remains the safe baseline until enough evidence exists.</p><div class="buttons"><button id="save-battery-profile" class="primary-button">Save Battery Profile</button><button id="clear-battery-profile" class="secondary-button">Clear Planning Profile</button><button id="clear-battery-capacity" class="secondary-button">Clear Capacity</button></div></article>
-      <article class="panel spaced"><div class="section-title"><div><span>LOCAL WEATHER</span><h2>Weather source</h2></div><ha-icon icon="mdi:weather-partly-cloudy"></ha-icon></div><label class="source-label">Weather Entity<select id="weather-source"><option value="">Select a weather entity…</option>${weatherCandidates.map(x=>`<option value="${this.esc(x.entity_id)}" ${x.entity_id===selectedWeather?'selected':''}>${this.esc(x.name)} · ${this.esc(x.entity_id)}</option>`).join('')}</select></label><div class="source-status"><div><span>Status</span><b>${weather.available?'Connected':'Waiting'}</b></div><div><span>Current condition</span><b>${this.esc(weather.condition||'—')}</b></div><div><span>Temperature</span><b>${weather.temperature==null?'—':`${weather.temperature} ${this.esc(weather.temperature_unit||'')}`}</b></div><div><span>Forecast</span><b>${weather.forecast_available?'Available':'Current data only'}</b></div></div><div class="buttons"><button id="save-weather" class="primary-button">Save Weather Source</button><button id="clear-weather">Clear</button></div></article>
+
 
     </section>`;
   }
@@ -12572,7 +12743,7 @@ pre,code,.entity-id,.mono{overflow-wrap:anywhere;word-break:break-word}
 @media(max-width:760px){#devControlCandidate{padding:18px 16px 20px!important}.control-permissions-row{gap:16px!important}.elwa-editor-section .control-subsection{margin-top:20px!important;padding-top:16px!important}}
 
 /* v14.8.10.3 Forecast Intelligence — dedicated Forecast page only */
-.zf-page{--zf-solar:#43e884;--zf-home:#54a9ff}.zf-head{margin-bottom:18px}.zf-hero{display:grid;grid-template-columns:minmax(0,1fr) 220px;gap:24px;padding:28px!important;align-items:center;background:linear-gradient(135deg,rgba(18,58,70,.78),rgba(10,28,42,.94))!important}.zf-hero-main>span,.zf-kpis span,.zf-day span,.zf-window span{font-size:11px;font-weight:900;letter-spacing:.09em;color:var(--muted)}.zf-hero-main h2{font-size:52px;line-height:1;margin:8px 0 6px}.zf-hero-main>p{margin:0 0 18px;color:#a9bfcc}.zf-hero-flow{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}.zf-hero-flow span{padding:10px 12px;border:1px solid rgba(85,145,170,.25);border-radius:10px;background:rgba(6,25,37,.5);font-size:11px;color:var(--muted)}.zf-hero-flow b{display:block;color:var(--text);font-size:15px;margin-top:3px}.zf-score{display:grid;place-items:center;gap:8px}.zf-score-ring{--score:0;width:146px;height:146px;border-radius:50%;display:grid;place-content:center;text-align:center;background:radial-gradient(circle at center,#0c2330 58%,transparent 59%),conic-gradient(var(--zf-solar) calc(var(--score)*1%),rgba(90,130,145,.18) 0);box-shadow:0 0 30px rgba(67,232,132,.08)}.zf-score-ring strong{font-size:32px}.zf-score-ring span{font-size:11px;color:var(--muted)}.zf-score>small{color:var(--muted);text-align:center}.zf-kpis{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px;margin-top:14px}.zf-kpis article{padding:18px!important;min-width:0;width:100%!important;height:118px!important;min-height:118px!important;box-sizing:border-box;display:flex;flex-direction:column;justify-content:center;align-self:stretch!important;margin:0!important}.zf-kpis b{display:block;font-size:24px;margin:6px 0}.zf-kpis small{color:var(--muted)}.zf-curve{height:230px;display:flex;align-items:stretch;gap:10px;padding:18px 8px 4px;border-bottom:1px solid rgba(90,140,160,.2)}.zf-curve-slot{flex:1;min-width:0;display:grid;grid-template-rows:1fr auto;gap:7px;text-align:center}.zf-bars{display:flex;gap:3px;align-items:end;justify-content:center;height:100%}.zf-bars i{width:34%;min-height:3px;height:var(--h);border-radius:4px 4px 1px 1px;transition:height .25s}.zf-bars i.solar{background:linear-gradient(180deg,#72f09f,#1f9d62)}.zf-bars i.home{background:linear-gradient(180deg,#69b8ff,#276fae)}.zf-curve-slot>span{font-size:10px;color:var(--muted)}.zf-legend{display:flex;gap:14px;font-size:11px;color:var(--muted)}.zf-legend i{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:5px}.zf-legend .solar{background:var(--zf-solar)}.zf-legend .home{background:var(--zf-home)}.zf-two{display:grid;grid-template-columns:1fr 1fr;gap:16px}.zf-windows{display:grid;gap:10px}.zf-window{display:grid;grid-template-columns:42px 1fr auto;gap:12px;align-items:center;padding:14px;border:1px solid rgba(80,145,165,.22);border-radius:12px;background:rgba(8,29,41,.48)}.zf-window-rank{width:34px;height:34px;border-radius:50%;display:grid;place-items:center;background:rgba(67,232,132,.12);color:var(--zf-solar);font-weight:900}.zf-window b{display:block;font-size:18px;margin:3px 0}.zf-window small{color:var(--muted)}.zf-window>strong{font-size:18px}.zf-evidence{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:9px}.zf-evidence>div{padding:11px;border:1px solid rgba(80,145,165,.18);border-radius:10px;background:rgba(7,27,39,.45)}.zf-evidence span{display:block;color:var(--muted);font-size:10px}.zf-evidence b{display:block;margin-top:4px;font-size:16px}.zf-risks{display:grid;gap:7px;margin-top:12px}.zf-risk{display:flex;align-items:center;gap:8px;padding:9px 10px;border-radius:9px;background:rgba(61,138,190,.09);font-size:11px}.zf-risk.warning{background:rgba(255,177,61,.10)}.zf-risk.good{background:rgba(67,232,132,.08)}.zf-risk ha-icon{--mdc-icon-size:17px}.zf-days{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:9px}.zf-day{padding:14px 12px;border:1px solid rgba(80,145,165,.18);border-radius:12px;background:rgba(7,27,39,.46);min-width:0}.zf-day.today{border-color:rgba(67,232,132,.45);box-shadow:inset 0 0 20px rgba(67,232,132,.035)}.zf-day-head{display:flex;justify-content:space-between;gap:7px}.zf-day-head ha-icon{--mdc-icon-size:23px;color:#ffd36d}.zf-day-head small{display:block;color:var(--muted);font-size:9px;margin-top:2px}.zf-day>b{display:block;font-size:22px;margin:12px 0 3px}.zf-day-range{font-size:10px;color:#91a9b6;margin-bottom:12px}.zf-day-metrics{display:grid;gap:6px}.zf-day-metrics span{display:flex;justify-content:space-between;font-size:9px;letter-spacing:0}.zf-day-metrics strong{color:var(--text);font-size:10px}.zf-quality{margin-top:12px}.zf-quality>i{height:4px;display:block;border-radius:999px;background:linear-gradient(90deg,var(--zf-solar) var(--w),rgba(90,140,155,.18) var(--w))}.zf-quality small{display:block;font-size:9px;color:var(--muted);margin-top:5px}.zf-adaptive{display:grid;grid-template-columns:1fr auto 1fr;gap:12px;align-items:center;margin:14px 0}.zf-adaptive span{padding:13px;border-radius:10px;background:rgba(7,27,39,.48);color:var(--muted);font-size:11px}.zf-adaptive b{display:block;color:var(--text);font-size:19px;margin-top:4px}.zf-adaptive ha-icon{color:var(--zf-solar)}
+.zf-page{--zf-solar:#43e884;--zf-home:#54a9ff}.zf-head{margin-bottom:18px}.zf-hero{display:grid;grid-template-columns:minmax(0,1fr) 220px;gap:24px;padding:28px!important;align-items:center;background:linear-gradient(135deg,rgba(18,58,70,.78),rgba(10,28,42,.94))!important}.zf-hero-main>span,.zf-kpis span,.zf-day span,.zf-window span{font-size:11px;font-weight:900;letter-spacing:.09em;color:var(--muted)}.zf-hero-main h2{font-size:52px;line-height:1;margin:8px 0 6px}.zf-hero-main>p{margin:0 0 18px;color:#a9bfcc}.zf-hero-flow{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}.zf-hero-flow span{padding:10px 12px;border:1px solid rgba(85,145,170,.25);border-radius:10px;background:rgba(6,25,37,.5);font-size:11px;color:var(--muted)}.zf-hero-flow b{display:block;color:var(--text);font-size:15px;margin-top:3px}.zf-score{display:grid;place-items:center;gap:8px}.zf-score-ring{--score:0;width:146px;height:146px;border-radius:50%;display:grid;place-content:center;text-align:center;background:radial-gradient(circle at center,#0c2330 58%,transparent 59%),conic-gradient(var(--zf-solar) calc(var(--score)*1%),rgba(90,130,145,.18) 0);box-shadow:0 0 30px rgba(67,232,132,.08)}.zf-score-ring strong{font-size:32px}.zf-score-ring span{font-size:11px;color:var(--muted)}.zf-score>small{color:var(--muted);text-align:center}.zf-kpis{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px;margin-top:14px}.zf-kpis article{padding:18px!important;min-width:0;width:100%!important;height:118px!important;min-height:118px!important;box-sizing:border-box;display:flex;flex-direction:column;justify-content:center;align-self:stretch!important;margin:0!important}.zf-kpis b{display:block;font-size:24px;margin:6px 0}.zf-kpis small{color:var(--muted)}.zf-local-weather-grid{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:10px;margin-top:14px}.zf-local-weather-grid>div{padding:13px;border:1px solid var(--line);border-radius:13px;background:var(--surface2);min-width:0}.zf-local-weather-grid span,.zf-local-weather-grid small{display:block;color:var(--muted);font-size:10px}.zf-local-weather-grid b{display:block;font-size:16px;margin:5px 0;overflow-wrap:anywhere}.zf-local-assessment{display:flex;gap:10px;align-items:flex-start;margin-top:12px;padding:12px 14px;border:1px solid var(--line);border-radius:13px;background:var(--surface2)}.zf-local-assessment p{margin:0}.zf-local-assessment.good ha-icon{color:var(--green)}.zf-local-assessment.warning ha-icon{color:var(--warn)}@media(max-width:1050px){.zf-local-weather-grid{grid-template-columns:repeat(3,minmax(0,1fr))}}@media(max-width:650px){.zf-local-weather-grid{grid-template-columns:1fr 1fr}}.zf-curve{height:230px;display:flex;align-items:stretch;gap:10px;padding:18px 8px 4px;border-bottom:1px solid rgba(90,140,160,.2)}.zf-curve-slot{flex:1;min-width:0;display:grid;grid-template-rows:1fr auto;gap:7px;text-align:center}.zf-bars{display:flex;gap:3px;align-items:end;justify-content:center;height:100%}.zf-bars i{width:34%;min-height:3px;height:var(--h);border-radius:4px 4px 1px 1px;transition:height .25s}.zf-bars i.solar{background:linear-gradient(180deg,#72f09f,#1f9d62)}.zf-bars i.home{background:linear-gradient(180deg,#69b8ff,#276fae)}.zf-curve-slot>span{font-size:10px;color:var(--muted)}.zf-legend{display:flex;gap:14px;font-size:11px;color:var(--muted)}.zf-legend i{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:5px}.zf-legend .solar{background:var(--zf-solar)}.zf-legend .home{background:var(--zf-home)}.zf-two{display:grid;grid-template-columns:1fr 1fr;gap:16px}.zf-windows{display:grid;gap:10px}.zf-window{display:grid;grid-template-columns:42px 1fr auto;gap:12px;align-items:center;padding:14px;border:1px solid rgba(80,145,165,.22);border-radius:12px;background:rgba(8,29,41,.48)}.zf-window-rank{width:34px;height:34px;border-radius:50%;display:grid;place-items:center;background:rgba(67,232,132,.12);color:var(--zf-solar);font-weight:900}.zf-window b{display:block;font-size:18px;margin:3px 0}.zf-window small{color:var(--muted)}.zf-window>strong{font-size:18px}.zf-evidence{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:9px}.zf-evidence>div{padding:11px;border:1px solid rgba(80,145,165,.18);border-radius:10px;background:rgba(7,27,39,.45)}.zf-evidence span{display:block;color:var(--muted);font-size:10px}.zf-evidence b{display:block;margin-top:4px;font-size:16px}.zf-risks{display:grid;gap:7px;margin-top:12px}.zf-risk{display:flex;align-items:center;gap:8px;padding:9px 10px;border-radius:9px;background:rgba(61,138,190,.09);font-size:11px}.zf-risk.warning{background:rgba(255,177,61,.10)}.zf-risk.good{background:rgba(67,232,132,.08)}.zf-risk ha-icon{--mdc-icon-size:17px}.zf-days{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:9px}.zf-day{padding:14px 12px;border:1px solid rgba(80,145,165,.18);border-radius:12px;background:rgba(7,27,39,.46);min-width:0}.zf-day.today{border-color:rgba(67,232,132,.45);box-shadow:inset 0 0 20px rgba(67,232,132,.035)}.zf-day-head{display:flex;justify-content:space-between;gap:7px}.zf-day-head ha-icon{--mdc-icon-size:23px;color:#ffd36d}.zf-day-head small{display:block;color:var(--muted);font-size:9px;margin-top:2px}.zf-day>b{display:block;font-size:22px;margin:12px 0 3px}.zf-day-range{font-size:10px;color:#91a9b6;margin-bottom:12px}.zf-day-metrics{display:grid;gap:6px}.zf-day-metrics span{display:flex;justify-content:space-between;font-size:9px;letter-spacing:0}.zf-day-metrics strong{color:var(--text);font-size:10px}.zf-quality{margin-top:12px}.zf-quality>i{height:4px;display:block;border-radius:999px;background:linear-gradient(90deg,var(--zf-solar) var(--w),rgba(90,140,155,.18) var(--w))}.zf-quality small{display:block;font-size:9px;color:var(--muted);margin-top:5px}.zf-adaptive{display:grid;grid-template-columns:1fr auto 1fr;gap:12px;align-items:center;margin:14px 0}.zf-adaptive span{padding:13px;border-radius:10px;background:rgba(7,27,39,.48);color:var(--muted);font-size:11px}.zf-adaptive b{display:block;color:var(--text);font-size:19px;margin-top:4px}.zf-adaptive ha-icon{color:var(--zf-solar)}
 @media(max-width:1100px){.zf-days{grid-template-columns:repeat(4,minmax(0,1fr))}.zf-kpis{grid-template-columns:repeat(2,minmax(0,1fr))}.zf-hero-flow{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(max-width:760px){.zf-hero{grid-template-columns:1fr}.zf-score{justify-self:center}.zf-hero-main h2{font-size:40px}.zf-two,.zf-kpis{grid-template-columns:1fr}.zf-days{grid-template-columns:repeat(2,minmax(0,1fr))}.zf-evidence{grid-template-columns:repeat(2,minmax(0,1fr))}.zf-curve{gap:5px;height:190px}.zf-curve-slot:nth-child(even)>span{visibility:hidden}}
 
@@ -12817,6 +12988,14 @@ pre,code,.entity-id,.mono{overflow-wrap:anywhere;word-break:break-word}
     });
     this.querySelector('#save-weather')?.addEventListener('click',async()=>{const entity_id=this.querySelector('#weather-source')?.value;if(!entity_id)return;await this._hass.callService('aion_ems_zeus','save_weather_source',{entity_id});await this._hass.callService('homeassistant','update_entity',{entity_id:['sensor.aion_ems_zeus_weather_context','sensor.aion_ems_zeus_forecast']});this.render();});
     this.querySelector('#clear-weather')?.addEventListener('click',async()=>{await this._hass.callService('aion_ems_zeus','clear_weather_source',{});await this._hass.callService('homeassistant','update_entity',{entity_id:['sensor.aion_ems_zeus_weather_context','sensor.aion_ems_zeus_forecast']});this.render();});
+    this.querySelector('#save-local-weather')?.addEventListener('click',async()=>{
+      const data={name:this.querySelector('#local-weather-name')?.value?.trim()||'Local Weather Station'};
+      this.querySelectorAll('[data-local-weather-field]').forEach(el=>{const v=el.value;if(v)data[el.dataset.localWeatherField]=v;});
+      if(Object.keys(data).length<=1){alert('Map at least one local weather sensor.');return;}
+      try{await this._hass.callService('aion_ems_zeus','save_local_weather_station',data);await this._hass.callService('homeassistant','update_entity',{entity_id:['sensor.aion_ems_zeus_local_weather_observation']});this._lastSignatureByPage?.clear();this.render();}catch(error){alert(error.message||String(error));}
+    });
+    this.querySelector('#clear-local-weather')?.addEventListener('click',async()=>{await this._hass.callService('aion_ems_zeus','clear_local_weather_station',{});await this._hass.callService('homeassistant','update_entity',{entity_id:['sensor.aion_ems_zeus_local_weather_observation']});this._lastSignatureByPage?.clear();this.render();});
+
     this.querySelector('#add-room-button')?.addEventListener('click',()=>{const name=this.querySelector('#room-name'),id=this.querySelector('#room-id'),icon=this.querySelector('#room-icon'),notes=this.querySelector('#room-notes');if(name)name.value='';if(id)id.value='';if(icon)icon.value='mdi:home-outline';if(notes)notes.value='';name?.focus();});
     this.querySelectorAll('[data-room-tab]').forEach(button=>button.addEventListener('click',()=>{this.querySelectorAll('[data-room-tab]').forEach(x=>x.classList.toggle('selected',x===button));this.querySelectorAll('[data-room-panel]').forEach(panel=>panel.hidden=panel.dataset.roomPanel!==button.dataset.roomTab);}));
     this.querySelector('#add-group-button')?.addEventListener('click',()=>{this.querySelector('[data-room-tab="groups"]')?.click();this.querySelector('#group-name')?.focus();});

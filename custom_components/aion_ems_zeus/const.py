@@ -2,7 +2,7 @@
 
 DOMAIN = "aion_ems_zeus"
 NAME = "AION EMS"
-VERSION = "15.0.49"
+VERSION = "15.0.54"
 
 PLATFORMS = ["sensor"]
 
@@ -87,6 +87,8 @@ SERVICE_CLEAR_ENTITY_MAPPING = "clear_entity_mapping"
 
 SERVICE_SAVE_WEATHER_SOURCE = "save_weather_source"
 SERVICE_CLEAR_WEATHER_SOURCE = "clear_weather_source"
+SERVICE_SAVE_LOCAL_WEATHER_STATION = "save_local_weather_station"
+SERVICE_CLEAR_LOCAL_WEATHER_STATION = "clear_local_weather_station"
 
 SERVICE_SAVE_TARIFF_SETTINGS = "save_tariff_settings"
 SERVICE_CLEAR_TARIFF_SETTINGS = "clear_tariff_settings"
