@@ -66,10 +66,23 @@ class IntelligenceEngine:
         result["best_window"] = best_window or "Now" if action == "consider_starting" else best_window or "No urgent action"
 
         if action == "consider_starting":
+            target = str(
+                item.get("device_name")
+                or item.get("target")
+                or "flexible load"
+            ).strip()
+            source_reason = str(item.get("reason") or "").strip()
+            # Never make a vague "could be used locally" claim. A start
+            # recommendation is only useful when Zeus can name the actual sink
+            # that the optimizer evaluated (EV, DHW, heat pump, smart plug, etc.).
+            # Preserve the optimizer's measured, device-specific reason so the
+            # user can see both the opportunity and where the energy can go.
             result.update(
-                title="Use solar surplus",
-                why_now="The home is exporting energy that could be used locally.",
-                expected_benefit="Increase solar self-consumption and reduce later grid use.",
+                title=f"Use surplus with {target}",
+                why_now=source_reason or f"{target} is an identified flexible load that can use the measured surplus.",
+                expected_benefit=f"Use more solar locally with {target} instead of exporting that available energy.",
+                actionable_surplus_sink=target,
+                actionable_surplus=True,
                 urgency="Now",
             )
         elif action == "consider_delaying_flexible_loads":
