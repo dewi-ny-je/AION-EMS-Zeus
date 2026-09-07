@@ -1033,8 +1033,15 @@ class AionEmsEnergyFlowDashboard extends HTMLElement {
   measuredToday(base={}){
     const out={...(base||{})},m=this.s('sensor.aion_ems_zeus_energy_mapping')?.attributes?.mappings||this.s('sensor.aion_ems_zeus_registry_summary')?.attributes?.entity_mappings||{},hybridDevices=this.deviceData().filter(d=>!!d.hybrid_inverter),hybridTruePv=this.deviceData().some(d=>String(d.solar_power_entity||'').trim()),spec=[['solar_energy_today','solar_energy_kwh'],['house_energy_today','house_energy_kwh'],['grid_import_energy_today','grid_import_energy_kwh'],['grid_export_energy_today','grid_export_energy_kwh'],['battery_charge_energy_today','battery_charge_energy_kwh'],['battery_discharge_energy_today','battery_discharge_energy_kwh']];
     let mappedSolarToday=false;
+    const batteryEnergyIds=new Set(['battery_charge_energy_today','battery_discharge_energy_today','battery_charge_energy_total','battery_discharge_energy_total','battery_energy_total'].map(field=>String(m[field]||'').trim()).filter(Boolean));
     for(const [field,key] of spec){
       const id=m[field],st=id?this.s(id):null;
+      if(field==='solar_energy_today'&&id&&batteryEnergyIds.has(String(id).trim())){
+        out.solar_energy_kwh_mapping_rejected=true;
+        out.solar_energy_kwh_mapping_rejected_reason='entity_also_mapped_as_battery_energy';
+        out.solar_energy_kwh_mapping_rejected_entity=id;
+        continue;
+      }
       if(!st||['unknown','unavailable','none',''].includes(String(st.state).trim().toLowerCase()))continue;
       const stateClass=String(st.attributes?.state_class||'').trim().toLowerCase();
       /*
@@ -2740,7 +2747,7 @@ class AionEmsEnergyFlowDashboard extends HTMLElement {
   commandCenterPage(){
     const n=(v,d=0)=>{const x=Number(v);return Number.isFinite(x)?x:d;};
     const today=this.periodData('today')||{}, quality=this.s('sensor.aion_ems_zeus_data_quality')?.attributes||{}, health=this.s('sensor.aion_ems_zeus_system_health')?.attributes||{}, forecast=this.s('sensor.aion_ems_zeus_forecast')?.attributes||{}, accuracy=this.s('sensor.aion_ems_zeus_prediction_accuracy')?.attributes||{}, learning=this.s('sensor.aion_ems_zeus_learning_intelligence')?.attributes||this.s('sensor.aion_ems_zeus_learning_preview')?.attributes||{}, weather=this.s('sensor.aion_ems_zeus_weather_context')?.attributes||{}, efficiency=this.s('sensor.aion_ems_zeus_home_efficiency')?.attributes||{}, seasonal=this.s('sensor.aion_ems_zeus_seasonal_analysis','sensor.aion_ems_zeus_energy_topology')?.attributes||{}, predictiveBattery=this.s('sensor.aion_ems_zeus_predictive_battery')?.attributes||{}, finance=this.s('sensor.aion_ems_zeus_finance_summary')?.attributes||{}, now=new Date();
-    const zeusVersion=String(this.s('sensor.aion_ems_zeus_platform_status')?.attributes?.version||'15.0.66').replace(/^v/i,'');
+    const zeusVersion=String(this.s('sensor.aion_ems_zeus_platform_status')?.attributes?.version||'15.0.72').replace(/^v/i,'');
     const control=this.s('sensor.aion_ems_zeus_smart_control_safety')?.attributes||{};
     const solar=Math.max(0,n(this.value('sensor.aion_ems_zeus_solar_power'))),home=Math.max(0,n(this.value('sensor.aion_ems_zeus_house_power'))),imp=Math.max(0,n(this.value('sensor.aion_ems_zeus_grid_import_power'))),exp=Math.max(0,n(this.value('sensor.aion_ems_zeus_grid_export_power'))),ch=Math.max(0,n(this.value('sensor.aion_ems_zeus_battery_charge_power'))),dis=Math.max(0,n(this.value('sensor.aion_ems_zeus_battery_discharge_power')));
     const isLoadDevice=d=>{if(d?.hybrid_inverter===true)return false;const text=[d?.type,d?.category,d?.role,d?.device_class,d?.name,d?.manufacturer,d?.model].filter(Boolean).join(' ').toLowerCase();const sourceTypes=['solar','photovoltaic','pv','inverter','fronius symo','fronius hybrid','battery inverter','smart meter','grid meter','energy meter','power meter','meter'];return !sourceTypes.some(x=>text.includes(x));};
@@ -3122,7 +3129,7 @@ class AionEmsEnergyFlowDashboard extends HTMLElement {
     const control=this.s('sensor.aion_ems_zeus_smart_control_safety')?.attributes||{};
     const qa=this.s('sensor.aion_ems_zeus_qa_diagnostics')?.attributes||{};
     const perf=this.s('sensor.aion_ems_zeus_performance_diagnostics')?.attributes||{};
-    const version=String(platform.version||'15.0.66').replace(/^v/i,'');
+    const version=String(platform.version||'15.0.72').replace(/^v/i,'');
     const source=flow.source_snapshot&&typeof flow.source_snapshot==='object'?flow.source_snapshot:{};
     const sourceKeys=['solar_power','grid_import_power','grid_export_power','battery_charge_power','battery_discharge_power','grid_power','battery_power'];
     const sources={};
@@ -3132,7 +3139,7 @@ class AionEmsEnergyFlowDashboard extends HTMLElement {
     const simulations=(Array.isArray(control.simulations)?control.simulations:[]).map(x=>({device_id:x.device_id||null,allowed:x.allowed,reason:x.reason||null,requested_power_w:x.requested_power_w??null,live:x.live?{surplus_w:x.live.surplus_w??null,boiler_temperature_c:x.live.boiler_temperature_c??null,element_temperature_c:x.live.element_temperature_c??null}:null,execution:x.execution?{status:x.execution.status||null,active:x.execution.active,last_value_w:x.execution.last_value_w??null,last_write_at:x.execution.last_write_at||null,last_error:x.execution.last_error||null,interlocks:Array.isArray(x.execution.interlocks)?x.execution.interlocks:[]}:null}));
     const goe=(((control.goe_mqtt||{}).devices)||[]).map(x=>({device_id:x.device_id||null,active:!!x.active,topic:x.topic||null,grid_power_entity:x.grid_power_entity||null,last_publish_at:x.last_publish_at||null,last_error:x.last_error||null}));
     const checks=Array.isArray(qa.checks)?qa.checks.slice(0,50).map(x=>({category:x.category||x.area||null,name:x.name||x.check||x.title||null,status:x.status||x.result||null,message:x.message||x.detail||null})):[];
-    const report={report_schema:'aion_ems_zeus_diagnostic_report_v1',generated_at:new Date().toISOString(),privacy:'No credentials, passwords, access tokens, MQTT credentials, NAS server addresses or secret connection data are included.',system:{zeus_version:version,frontend_version:'15.0.66',registered_devices:devices.length,performance:perf.status||perf.mode||null,recorder_attribute_limit_bytes:16384,energy_flow_recorder_protected:true},energy_flow:{status:flowRoot.status||flowState?.state||null,snapshot_completed:flow.snapshot_completed||flow.flow_snapshot_completed||flow.snapshot_timestamp||flow.last_updated||null,update_latency_ms:flowRoot.update_latency_ms??flow.update_latency_ms??perf.update_latency_ms??'unavailable',source_skew_ms:flow.source_skew_ms??null,house_power_w:this.value('sensor.aion_ems_zeus_house_power'),solar_power_w:this.value('sensor.aion_ems_zeus_solar_power'),grid_import_power_w:this.value('sensor.aion_ems_zeus_grid_import_power'),grid_export_power_w:this.value('sensor.aion_ems_zeus_grid_export_power'),battery_charge_power_w:this.value('sensor.aion_ems_zeus_battery_charge_power'),battery_discharge_power_w:this.value('sensor.aion_ems_zeus_battery_discharge_power'),sources},registered_devices:devices,smart_control:{execution_path:control.execution_path||null,registered_devices:control.registered_devices??devices.length,controllable_candidates:control.controllable_candidates??null,permissioned_candidates:control.permissioned_candidates??null,devices:focused,simulations,goe_mqtt:goe},self_test:{status:qa.status||'Not run',score:qa.score??null,grade:qa.grade||null,passed:qa.passed_count??null,warnings:qa.warning_count??null,errors:qa.error_count??null,checks}}; return this._sanitizeDiagnosticExport(report);
+    const report={report_schema:'aion_ems_zeus_diagnostic_report_v1',generated_at:new Date().toISOString(),privacy:'No credentials, passwords, access tokens, MQTT credentials, NAS server addresses or secret connection data are included.',system:{zeus_version:version,frontend_version:'15.0.72',registered_devices:devices.length,performance:perf.status||perf.mode||null,recorder_attribute_limit_bytes:16384,energy_flow_recorder_protected:true},energy_flow:{status:flowRoot.status||flowState?.state||null,snapshot_completed:flow.snapshot_completed||flow.flow_snapshot_completed||flow.snapshot_timestamp||flow.last_updated||null,update_latency_ms:flowRoot.update_latency_ms??flow.update_latency_ms??perf.update_latency_ms??'unavailable',source_skew_ms:flow.source_skew_ms??null,house_power_w:this.value('sensor.aion_ems_zeus_house_power'),solar_power_w:this.value('sensor.aion_ems_zeus_solar_power'),grid_import_power_w:this.value('sensor.aion_ems_zeus_grid_import_power'),grid_export_power_w:this.value('sensor.aion_ems_zeus_grid_export_power'),battery_charge_power_w:this.value('sensor.aion_ems_zeus_battery_charge_power'),battery_discharge_power_w:this.value('sensor.aion_ems_zeus_battery_discharge_power'),sources},registered_devices:devices,smart_control:{execution_path:control.execution_path||null,registered_devices:control.registered_devices??devices.length,controllable_candidates:control.controllable_candidates??null,permissioned_candidates:control.permissioned_candidates??null,devices:focused,simulations,goe_mqtt:goe},self_test:{status:qa.status||'Not run',score:qa.score??null,grade:qa.grade||null,passed:qa.passed_count??null,warnings:qa.warning_count??null,errors:qa.error_count??null,checks}}; return this._sanitizeDiagnosticExport(report);
   }
   _sanitizeDiagnosticExport(value){
     if(value==null) return value;
@@ -3263,7 +3270,7 @@ class AionEmsEnergyFlowDashboard extends HTMLElement {
     const platform=this.s('sensor.aion_ems_zeus_platform_status')?.attributes||{};
     const qa=this.s('sensor.aion_ems_zeus_qa_diagnostics')?.attributes||{};
     const perf=this.s('sensor.aion_ems_zeus_performance_diagnostics')?.attributes||{};
-    const version=String(platform.version||'15.0.66').replace(/^v/i,'');
+    const version=String(platform.version||'15.0.72').replace(/^v/i,'');
     const sourceSnapshot=flow.source_snapshot&&typeof flow.source_snapshot==='object'?flow.source_snapshot:{};
     const fmtTs=v=>{if(!v)return '—';try{return new Date(v).toLocaleString();}catch(_e){return String(v)}};
     const fmtVal=v=>{const n=Number(v);return Number.isFinite(n)?this.watts(n):'—';};
@@ -5588,8 +5595,33 @@ class AionEmsEnergyFlowDashboard extends HTMLElement {
     const rows=[['Today','energy_today_kwh','mdi:water-boiler'],['This week','energy_week_kwh','mdi:calendar-week-outline'],['This month','energy_month_kwh','mdi:calendar-month-outline'],['This year','energy_year_kwh','mdi:calendar-outline']];
 
     const livePower=standalone.reduce((a,d)=>a+Math.max(0,Number(d?.power_w)||0),0);
-    const tempValues=standalone.map(d=>Number(d?.temperature_c??d?.water_temperature_c??d?.current_temperature_c)).filter(Number.isFinite);
-    const liveTemp=tempValues.length?tempValues[0]:null;
+
+    // Canonical DHW temperature authority:
+    // 1) Smart Control boiler/stored-water evidence
+    // 2) Heat Pump DHW mapped temperature
+    // 3) standalone device temperature only as a legacy fallback
+    //
+    // ELWA element/internal temperature must never be presented as the
+    // boiler/stored-water temperature when canonical boiler evidence exists.
+    const control=this.s('sensor.aion_ems_zeus_smart_control_safety')?.attributes||{};
+    const controlSims=Array.isArray(control.simulations)?control.simulations:[];
+    const standaloneIds=new Set(standalone.map(d=>String(d?.id||'')));
+    const boilerSim=controlSims.find(s=>standaloneIds.has(String(s?.device_id||''))&&Number.isFinite(Number(s?.live?.boiler_temperature_c)))
+      ||controlSims.find(s=>/elwa|water.?heater|dhw/i.test(`${s?.name||''} ${s?.device_id||''}`)&&Number.isFinite(Number(s?.live?.boiler_temperature_c)));
+    const controlBoilerTemp=Number(boilerSim?.live?.boiler_temperature_c);
+
+    const hpTempDevice=hpCompactDevices.find(d=>Number.isFinite(Number(d?.dhw_temperature)));
+    const hpBoilerTemp=Number(hpTempDevice?.dhw_temperature);
+
+    const legacyTempValues=standalone.map(d=>Number(d?.temperature_c??d?.water_temperature_c??d?.current_temperature_c)).filter(Number.isFinite);
+    const legacyTemp=legacyTempValues.length?legacyTempValues[0]:null;
+
+    const liveTemp=Number.isFinite(controlBoilerTemp)
+      ?controlBoilerTemp
+      :(Number.isFinite(hpBoilerTemp)?hpBoilerTemp:legacyTemp);
+    const liveTempSource=Number.isFinite(controlBoilerTemp)
+      ?'Canonical boiler / stored-water temperature'
+      :(Number.isFinite(hpBoilerTemp)?'Mapped Heat Pump DHW temperature':'Registered DHW temperature fallback');
 
     const dea=this._deaData||{},deaDevices=Array.isArray(dea.devices)?dea.devices:[],ids=new Set(standalone.map(d=>String(d.id)));
     const deaRows=deaDevices.filter(d=>ids.has(String(d.id))).map(d=>d?.periods?.today).filter(Boolean);
@@ -5621,7 +5653,7 @@ class AionEmsEnergyFlowDashboard extends HTMLElement {
 
       <article class="panel"><div class="section-title"><div><span>DHW · LIVE</span><h2>Current hot-water evidence</h2></div><ha-icon icon="mdi:thermometer-water"></ha-icon></div><div class="energy-statistics-grid">
         <div class="energy-statistics-card"><ha-icon icon="mdi:flash"></ha-icon><div><span>Standalone DHW power</span><b>${standalone.length?this.watts(livePower):'Unavailable'}</b><small>${standalone.length?'Registered standalone electrical DHW load':'No standalone DHW registered'}</small></div></div>
-        <div class="energy-statistics-card"><ha-icon icon="mdi:thermometer-water"></ha-icon><div><span>DHW temperature</span><b>${liveTemp==null?'Unavailable':`${liveTemp.toFixed(1)} °C`}</b><small>Mapped boiler / stored-water temperature when available</small></div></div>
+        <div class="energy-statistics-card"><ha-icon icon="mdi:thermometer-water"></ha-icon><div><span>DHW temperature</span><b>${liveTemp==null?'Unavailable':`${liveTemp.toFixed(1)} °C`}</b><small>${this.esc(liveTempSource)}</small></div></div>
         <div class="energy-statistics-card"><ha-icon icon="mdi:heat-pump-outline"></ha-icon><div><span>Heat Pump DHW sources</span><b>${heatPumpDhw.length}</b><small>${heatPumpDhw.length?'Existing Heat Pump Intelligence mappings':'None configured'}</small></div></div>
       </div></article>
 

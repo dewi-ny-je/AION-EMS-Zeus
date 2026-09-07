@@ -1882,6 +1882,23 @@ class DataLake:
         dedicated_pv_entity = str((self.energy_mapping.mappings or {}).get("solar_power") or "").strip()
         dedicated_true_pv_configured = bool(dedicated_pv_entity)
         mapped_daily_solar = self._mapped_energy_kwh("solar_energy_today")
+        mappings = dict(self.energy_mapping.mappings or {})
+        mapped_solar_entity = str(mapped_daily_solar[2] or "").strip() if mapped_daily_solar[0] is not None else ""
+        battery_energy_entities = {
+            str(mappings.get(field) or "").strip()
+            for field in (
+                "battery_charge_energy_today", "battery_discharge_energy_today",
+                "battery_charge_energy_total", "battery_discharge_energy_total",
+                "battery_energy_total",
+            )
+            if str(mappings.get(field) or "").strip()
+        }
+        solar_mapping_collision = bool(mapped_solar_entity and mapped_solar_entity in battery_energy_entities)
+        if solar_mapping_collision:
+            daily["solar_energy_mapping_rejected"] = True
+            daily["solar_energy_mapping_rejected_reason"] = "entity_also_mapped_as_battery_energy"
+            daily["solar_energy_mapping_rejected_entity"] = mapped_solar_entity
+            mapped_daily_solar = (None, None, None)
         if dedicated_true_pv_configured and mapped_daily_solar[0] is not None:
             # A valid daily-reset Solar energy mapping is the authoritative
             # current-calendar-day True-PV total. The mapped Solar power entity
@@ -1922,7 +1939,6 @@ class DataLake:
                 "battery_charge_energy_kwh", "grid_import_energy_kwh",
                 "battery_discharge_energy_kwh",
             )
-            mappings = dict(self.energy_mapping.mappings or {})
             other_generation_configured = any(
                 str(mappings.get(field) or "").strip()
                 for field in ("wind_power", "generator_power")

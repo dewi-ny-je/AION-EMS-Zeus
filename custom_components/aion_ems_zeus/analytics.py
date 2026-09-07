@@ -435,9 +435,25 @@ class HistoricalAnalyticsEngine:
             "battery_discharge_energy_kwh": "battery_discharge_energy_today",
         }
         out: dict[str, Any] = {}
+        battery_role_entities = {
+            str(mappings.get(field) or "").strip()
+            for field in (
+                "battery_charge_energy_today", "battery_discharge_energy_today",
+                "battery_charge_energy_total", "battery_discharge_energy_total",
+                "battery_energy_total",
+            )
+            if str(mappings.get(field) or "").strip()
+        }
         for key, field in roles.items():
             entity_id = str(mappings.get(field) or "").strip()
             if not entity_id:
+                continue
+            # A battery energy entity must never be accepted as Solar Today,
+            # even if it was accidentally selected in a generic energy picker.
+            if field == "solar_energy_today" and entity_id in battery_role_entities:
+                out["solar_energy_kwh_mapping_rejected"] = True
+                out["solar_energy_kwh_mapping_rejected_reason"] = "entity_also_mapped_as_battery_energy"
+                out["solar_energy_kwh_mapping_rejected_entity"] = entity_id
                 continue
             state = self.hass.states.get(entity_id)
             if state is None or str(state.state).strip().lower() in {"", "unknown", "unavailable", "none"}:
@@ -543,11 +559,25 @@ class HistoricalAnalyticsEngine:
                 # dedicated photovoltaic power sensor. Other mapped meters remain
                 # authoritative as before.
                 if energy_key == "solar_energy_kwh" and hybrid_true_pv_configured:
-                    # Energy totals follow the same configured HA Energy solar
-                    # source set that feeds the Energy Dashboard. A dedicated
-                    # True-PV power entity remains the instantaneous live source
-                    # and the fallback only when no HA Energy statistic exists.
                     recorder_value = max(float(values[day] or 0.0), 0.0)
+                    if day == today_key:
+                        # In-progress HA Energy solar statistics can carry a
+                        # day-boundary residue when the source set itself is
+                        # composed of daily-reset inverter meters. On hybrid
+                        # systems that can make "Solar Today" show nighttime
+                        # energy that did not come from PV.
+                        #
+                        # Completed days remain authoritative from Recorder, but
+                        # the current local day is owned by the dedicated True-PV
+                        # input/integrator (or an explicit mapped daily PV meter
+                        # applied later by _mapped_today_overlay()).
+                        row["solar_energy_ha_source_set_today_rejected_kwh"] = round(recorder_value, 4)
+                        row["solar_energy_ha_source_set_today_rejected_source"] = stat_entities.get(energy_key)
+                        row["solar_energy_ha_source_set_today_rejected_reason"] = "hybrid_current_day_uses_true_pv_authority"
+                        row["solar_true_pv_live_entity"] = hybrid_true_pv_entity
+                        continue
+                    # Completed calendar days may safely use the same configured
+                    # HA Energy solar source set that feeds the Energy Dashboard.
                     row["solar_energy_kwh"] = round(recorder_value, 4)
                     row["solar_energy_kwh_method"] = "home_assistant_energy_source_set_statistics"
                     row["solar_energy_kwh_source"] = stat_entities.get(energy_key)
@@ -608,14 +638,21 @@ class HistoricalAnalyticsEngine:
                 today_key in (self._ha_energy_days.get("solar_energy_kwh", {}) or {})
                 and today_row.get("solar_energy_kwh_method") == "home_assistant_energy_source_set_statistics"
             )
-            canonical_today = max(float(today_row.get("solar_energy_kwh", true_pv_today) or 0.0), 0.0)
+            # A hybrid inverter's generic AC-energy statistic can include
+            # battery discharge and must never become Today's solar production.
+            # Only a dedicated mapped daily PV meter or an explicit HA Energy
+            # solar source may override the canonical true-PV power integration.
+            if mapped_solar_active or ha_solar_active:
+                canonical_today = max(float(today_row.get("solar_energy_kwh", true_pv_today) or 0.0), 0.0)
+            else:
+                canonical_today = true_pv_today
+                today_row["solar_energy_kwh_method"] = "inputs_solar_power_integration"
+                today_row["solar_energy_kwh_source"] = hybrid_true_pv_entity
+                today_row["solar_hybrid_generic_energy_rejected"] = True
             today_row["hybrid_true_pv_configured"] = True
             today_row["hybrid_true_pv_entity"] = hybrid_true_pv_entity
             today_row["solar_true_pv_integrated_kwh"] = round(true_pv_today, 4)
             today_row["solar_energy_kwh"] = round(canonical_today, 4)
-            if not mapped_solar_active and not ha_solar_active:
-                today_row.setdefault("solar_energy_kwh_method", "inputs_solar_power_integration")
-                today_row["solar_energy_kwh_source"] = hybrid_true_pv_entity
         # Match Home Assistant Energy calendar periods. A Week is the current
         # local ISO week (Monday through today), not a rolling seven-day window.
         # Rolling windows are still exposed separately for comparisons/averages.

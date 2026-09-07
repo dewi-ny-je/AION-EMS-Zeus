@@ -188,6 +188,35 @@ class SmartControlSafetyEngine:
             return None
         return str(state.state)
 
+    def _canonical_grid_import_w(self) -> float | None:
+        """Return canonical live grid import as a positive watt magnitude.
+
+        Prefer the dedicated Grid Import mapping. If the installation uses one
+        bidirectional Grid Power entity, apply the saved Zeus sign convention.
+        This is read-only evidence used to prevent an already-running ELWA from
+        treating its own grid-fed load as reconstructed solar surplus.
+        """
+        data = (getattr(self.registry, "data", {}) or {})
+        mappings = dict(data.get("entity_mappings") or {})
+        options = dict(data.get("mapping_options") or {})
+
+        import_entity = str(mappings.get("grid_import_power") or "").strip()
+        if import_entity:
+            value = self._state_number(import_entity)
+            if value is not None:
+                return max(0.0, float(value))
+
+        grid_entity = str(mappings.get("grid_power") or "").strip()
+        if grid_entity:
+            value = self._state_number(grid_entity)
+            if value is not None:
+                sign = str(options.get("grid_power_sign") or "positive_import")
+                normalized = float(value) if sign == "positive_import" else -float(value)
+                return max(0.0, normalized)
+
+        return None
+
+
     def _direct_elwa_ip(self, device: dict[str, Any]) -> str | None:
         value = str(device.get("control_elwa_ip") or "").strip()
         return value or None
@@ -298,7 +327,18 @@ class SmartControlSafetyEngine:
         measured_elwa_for_solar_w = 0.0
         if solar_was_active and current_power_w is not None and current_power_w > 0:
             measured_elwa_for_solar_w = max(0.0, current_power_w)
-        effective_solar_surplus_w = (surplus_w + measured_elwa_for_solar_w) if surplus_w is not None else None
+
+        # RUNNING feedback must account for real grid import. Without this
+        # correction an already-running ELWA can become self-sustaining:
+        # export falls to 0 W, Zeus adds the ELWA's own consumption back, and
+        # incorrectly concludes the same load is still solar surplus even while
+        # the site is importing from grid.
+        grid_import_w = self._canonical_grid_import_w()
+        feedback_import_w = max(0.0, float(grid_import_w or 0.0))
+        effective_solar_surplus_w = (
+            max(0.0, surplus_w + measured_elwa_for_solar_w - feedback_import_w)
+            if surplus_w is not None else None
+        )
 
         # Maintain separate GRID BACKUP hysteresis.  Solar always has priority,
         # but an armed backup remains armed through the 50-55 °C band so it can
@@ -365,7 +405,13 @@ class SmartControlSafetyEngine:
             solar_feedback_active = bool(solar_was_active and measured_elwa_for_solar_w > 0)
             if solar_feedback_active:
                 solar_basis_w = effective_solar_surplus_w
-                solar_start_ok = True
+                # Running SOLAR may continue below the normal OFF->ON start
+                # threshold, but only while reconstructed PV headroom remains
+                # above the configured minimum useful ELWA request.
+                solar_start_ok = bool(
+                    solar_basis_w is not None
+                    and solar_basis_w >= max(min_w, solar_export_reserve_w)
+                )
 
             if solar_start_ok and solar_basis_w is not None:
                 # Closed-loop solar modulation. OFF->ON still uses the 800 W raw
@@ -380,8 +426,19 @@ class SmartControlSafetyEngine:
                 #          = 3227 W before the device maximum clamp.
                 # STARTING: target = raw_export * solar_factor (proven HA rule).
                 if solar_feedback_active:
-                    usable_export_headroom_w = max(0.0, surplus_w - solar_export_reserve_w)
-                    dynamic_solar_target_w = measured_elwa_for_solar_w + (usable_export_headroom_w * solar_factor)
+                    # Closed-loop correction around the current measured ELWA
+                    # load. Positive net export lets ELWA increase; real grid
+                    # import forces the target down immediately. The export
+                    # reserve remains protected in both directions.
+                    grid_error_w = (
+                        float(surplus_w)
+                        - feedback_import_w
+                        - solar_export_reserve_w
+                    )
+                    dynamic_solar_target_w = (
+                        measured_elwa_for_solar_w
+                        + (grid_error_w * solar_factor)
+                    )
                 else:
                     dynamic_solar_target_w = solar_basis_w * solar_factor
                 dynamic_solar_target_w = min(max_w, max(0.0, dynamic_solar_target_w))
@@ -391,10 +448,11 @@ class SmartControlSafetyEngine:
                 if solar_feedback_active:
                     solar_reason = (
                         f"SOLAR running feedback: {surplus_w:.0f} W remaining export + "
-                        f"{measured_elwa_for_solar_w:.0f} W measured ELWA = "
+                        f"{measured_elwa_for_solar_w:.0f} W measured ELWA - "
+                        f"{feedback_import_w:.0f} W grid import = "
                         f"{solar_basis_w:.0f} W effective surplus; preserve "
                         f"{solar_export_reserve_w:.0f} W export reserve and apply "
-                        f"{solar_factor * 100:.0f}% to remaining export headroom, "
+                        f"{solar_factor * 100:.0f}% closed-loop correction, "
                         f"target {dynamic_solar_target_w:.0f} W."
                     )
                 else:
@@ -414,6 +472,15 @@ class SmartControlSafetyEngine:
                         f"minimum {min_w:.0f} W; SOLAR stops."
                     )
                     solar_requested_w = 0.0
+
+            if solar_feedback_active and not solar_start_ok and not solar_reason:
+                solar_reason = (
+                    f"SOLAR feedback stopped: {surplus_w:.0f} W remaining export + "
+                    f"{measured_elwa_for_solar_w:.0f} W measured ELWA - "
+                    f"{feedback_import_w:.0f} W grid import = "
+                    f"{(solar_basis_w or 0.0):.0f} W effective surplus, below "
+                    f"the minimum useful/reserve floor."
+                )
 
             if solar_requested_w > 0:
                 requested_w = solar_requested_w

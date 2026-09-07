@@ -1596,6 +1596,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_e
         EnergyFlowValueSensor(coordinator, core, "House Power", "house_power", "house_power", "mdi:home-lightning-bolt", "W", SensorDeviceClass.POWER),
         EnergyFlowValueSensor(coordinator, core, "Grid Import Power", "grid_import_power", "grid_import_power", "mdi:transmission-tower-import", "W", SensorDeviceClass.POWER),
         EnergyFlowValueSensor(coordinator, core, "Grid Export Power", "grid_export_power", "grid_export_power", "mdi:transmission-tower-export", "W", SensorDeviceClass.POWER),
+        EVSurplusGridSignalSensor(coordinator, core),
         EnergyFlowValueSensor(coordinator, core, "Battery Power", "battery_power", "battery_power", "mdi:battery-sync", "W", SensorDeviceClass.POWER),
         EnergyFlowValueSensor(coordinator, core, "Battery Charge Power", "battery_charge_power", "battery_charge_power", "mdi:battery-arrow-up", "W", SensorDeviceClass.POWER),
         EnergyFlowValueSensor(coordinator, core, "Battery Discharge Power", "battery_discharge_power", "battery_discharge_power", "mdi:battery-arrow-down", "W", SensorDeviceClass.POWER),
@@ -1994,6 +1995,63 @@ class EnergyFlowValueSensor(CoordinatorEntity, SensorEntity):
             "safety": "Read-only derived sensor. No device control.",
         }
         return _apply_recorder_guard(self, attrs)
+
+
+class EVSurplusGridSignalSensor(CoordinatorEntity, SensorEntity):
+    """Signed grid signal for external EV surplus controllers such as go-e.
+
+    Semantics intentionally match common smart-meter/go-e pGrid convention:
+    positive = importing from grid, negative = exporting/surplus.
+    Zeus does not control charger current or phases; it only publishes the
+    canonical measured grid balance.
+    """
+
+    def __init__(self, coordinator, core) -> None:
+        super().__init__(coordinator)
+        self.core = core
+        self._attr_has_entity_name = True
+        self._attr_name = "EV Surplus Grid Signal"
+        self._attr_unique_id = f"{DOMAIN}_ev_surplus_grid_signal"
+        self._attr_icon = "mdi:ev-station"
+        self._attr_native_unit_of_measurement = "W"
+        self._attr_device_class = SensorDeviceClass.POWER
+        self._attr_state_class = SensorStateClass.MEASUREMENT
+        self.entity_id = "sensor.aion_ems_zeus_ev_surplus_grid_signal"
+
+    def _snapshot(self) -> tuple[float | None, dict[str, Any]]:
+        flow = self.core.energy_flow.summary() or {}
+        flows = flow.get("flows") or {}
+        imp = flows.get("grid_import_power")
+        exp = flows.get("grid_export_power")
+        imp_w = imp.get("w") if isinstance(imp, dict) else None
+        exp_w = exp.get("w") if isinstance(exp, dict) else None
+        try:
+            imp_w = max(float(imp_w or 0.0), 0.0)
+            exp_w = max(float(exp_w or 0.0), 0.0)
+        except (TypeError, ValueError):
+            return None, {"available": False, "safety": "Read-only signal. No charger control."}
+        value = imp_w - exp_w
+        return round(value, 1), {
+            "available": True,
+            "grid_import_w": round(imp_w, 1),
+            "grid_export_w": round(exp_w, 1),
+            "direction": "import" if value > 0 else "export" if value < 0 else "idle",
+            "surplus_w": round(max(-value, 0.0), 1),
+            "sign_convention": "positive_import_negative_export",
+            "go_e_pgrid_compatible": True,
+            "recommended_payload_field": "pGrid",
+            "battery_payload_policy": "pAkku remains charger/automation policy; Zeus does not override it.",
+            "source": "aion_ems_energy_flow_canonical_grid_balance",
+            "safety": "Read-only derived signal. No charger current, phase or relay control.",
+        }
+
+    @property
+    def native_value(self):
+        return self._snapshot()[0]
+
+    @property
+    def extra_state_attributes(self):
+        return _apply_recorder_guard(self, self._snapshot()[1])
 
 
 class EVPowerSensor(EnergyFlowValueSensor):
