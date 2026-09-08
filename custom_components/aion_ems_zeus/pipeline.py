@@ -417,6 +417,38 @@ class IntegrationHub:
         rows.sort(key=lambda x: str(x.get("name") or "").lower())
         return rows[:50]
 
+    @staticmethod
+    def _is_energy_candidate_state(state) -> bool:
+        """Return True only for entities that are plausible Zeus energy telemetry.
+
+        Integration transports such as MQTT, ZHA and Shelly often expose a large
+        amount of diagnostic/software telemetry alongside the actual electrical
+        measurements. Integration Hub is for importing energy devices, so CPU
+        temperature, link/status, firmware and other non-energy entities must not
+        be presented as physical-energy candidates merely because they share the
+        same transport.
+        """
+        if state is None:
+            return False
+        attrs = state.attributes or {}
+        device_class = str(attrs.get("device_class") or "").strip().lower()
+        unit = str(attrs.get("unit_of_measurement") or "").strip().lower().replace(" ", "")
+        domain = str(getattr(state, "domain", "") or state.entity_id.split(".", 1)[0]).lower()
+
+        # These are the measurements the Integration Hub import form can actually
+        # use as canonical device power/energy evidence. Keep the rule semantic
+        # rather than name-based so custom MQTT/Bluetti/Shelly entity names work.
+        if device_class in {"power", "energy"}:
+            return True
+        if unit in {"w", "kw", "mw", "wh", "kwh", "mwh"}:
+            return True
+
+        # Never promote status/connectivity/temperature style entities simply
+        # because they originate from an energy-capable MQTT/Zigbee device.
+        if domain in {"binary_sensor", "button", "device_tracker", "event", "update"}:
+            return False
+        return False
+
     def _entity_candidates(self, kind):
         if kind == "inverter_adapters":
             return self._physical_inverter_candidates()
@@ -439,6 +471,13 @@ class IntegrationHub:
                 or kind == "inverter_adapters" and is_inverter
             )
             if not matched:
+                continue
+            # v16.0.7: transport membership alone does not make an entity an
+            # energy-device candidate. Filter out MQTT/Zigbee/Shelly diagnostics
+            # such as CPU temperature and system status; keep only usable live
+            # power / energy telemetry. Inverter adapters retain their dedicated
+            # physical-device discovery path above.
+            if kind in {"shelly", "zigbee", "mqtt"} and not self._is_energy_candidate_state(state):
                 continue
             row = {
                 "entity_id": state.entity_id,
@@ -579,7 +618,14 @@ class IntegrationHub:
                     group["recommended_energy_entity"] = energy_ranked[0]["entity_id"]
                     group["energy_confidence"] = min(100, max(0, energy_score(energy_ranked[0])))
         rows.sort(key=lambda x: (str(x.get("device_name") or x.get("name") or "").lower(), str(x.get("entity_id") or "")))
-        return rows[:100]
+        # v16.0.6: do not truncate Integration Hub discovery to the first 100
+        # alphabetically sorted entities. Large Home Assistant installations can
+        # easily exceed that count (especially MQTT), which previously meant later
+        # entities were impossible to select from Plugins & Integrations. Keep the
+        # complete runtime candidate list; Recorder already receives only the compact
+        # Integration Hub summary, while per-plugin discovery detail is partitioned
+        # onto dedicated non-Recorder discovery entities.
+        return rows
 
     def _notify_services(self):
         """Discover legacy notify services and modern notify entities.
