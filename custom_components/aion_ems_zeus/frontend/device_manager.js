@@ -1104,29 +1104,71 @@ class AionEmsEnergyFlowDashboard extends HTMLElement {
       out[key]=corrected;
     }
     if(out.period_evidence_complete!==false)out.period_evidence_complete=true;
-    const solar=Math.max(0,Number(out.solar_energy_kwh)||0),home=Math.max(0,Number(out.house_energy_kwh)||0),exp=Math.max(0,Number(out.grid_export_energy_kwh)||0),dis=Math.max(0,Number(out.battery_discharge_energy_kwh)||0);
-    const direct=Math.min(Math.max(solar-exp,0),home);
-    out.direct_solar_consumption_kwh=direct;
-    out.self_consumption_percent=solar>0?direct/solar*100:null;
-    const localSupply=Math.min(home,direct+dis);
-    out.self_sufficiency_percent=home>0?localSupply/home*100:null;
+    const allocation=this.periodEnergyAllocation(out);
+    Object.assign(out,allocation);
+    // Most pages read `house_energy_kwh` directly. Promote the canonical home
+    // consumption into that key so a period with no measured whole-home meter
+    // shows the balance everywhere instead of 0 kWh on some pages and the
+    // balance on others. The raw statistic stays available for diagnostics.
+    out.house_energy_kwh_measured=allocation.measured_house_statistic_kwh;
+    out.house_energy_kwh=allocation.home_consumption_kwh;
     out.live_period_reconciled=true;
     out.live_period_reconciliation='current_day_delta';
     return out;
   }
+  /*
+   * Single period-energy authority for every Zeus surface.
+   *
+   * Home consumption and the solar/battery/grid split used to be derived three
+   * different ways: this method's predecessor in periodData(), a second balance
+   * inside financePeriodData(), and a third allocation in the backend
+   * (analytics.py _aggregate). The Finance variant clamped direct solar at
+   * `max(0, solar - export - charge)`, which silently dropped the battery-charge
+   * term whenever the battery charged from the grid, so Finance pages reported a
+   * larger home consumption than Statistics for the same period.
+   *
+   * The rules below mirror analytics.py _aggregate exactly:
+   *   - a measured whole-home statistic is authoritative when present;
+   *   - otherwise home = solar + import + discharge - export - charge, the same
+   *     balance EnergyFlowEngine uses for live House Power;
+   *   - locally supplied energy = home - import;
+   *   - measured battery discharge is allocated to the home first, then the
+   *     remaining local supply is attributed to direct solar, capped by PV.
+   * Export is never subtracted from PV to compute utilisation, because export
+   * can contain stored energy.
+   */
+  periodEnergyAllocation(row={}){
+    const n=v=>{const x=Number(v);return Number.isFinite(x)?Math.max(0,x):0;};
+    const solar=n(row.solar_energy_kwh),imp=n(row.grid_import_energy_kwh),exp=n(row.grid_export_energy_kwh);
+    const charge=n(row.battery_charge_energy_kwh),discharge=n(row.battery_discharge_energy_kwh);
+    const measuredHome=Number(row.house_energy_kwh),hasMeasuredHome=Number.isFinite(measuredHome)&&measuredHome>0;
+    const balancedHome=Math.max(0,solar+imp+discharge-exp-charge);
+    const home=hasMeasuredHome?Math.max(0,measuredHome):balancedHome;
+    const localSupply=Math.max(0,home-imp);
+    const batteryToHome=Math.min(discharge,localSupply);
+    const directSolar=Math.min(solar,Math.max(0,localSupply-batteryToHome));
+    return {
+      home_consumption_kwh:home,
+      home_consumption_authority:hasMeasuredHome?'measured_house_statistic':'whole_home_energy_balance',
+      home_consumption_balance_kwh:balancedHome,
+      measured_house_statistic_kwh:hasMeasuredHome?Math.max(0,measuredHome):null,
+      local_home_supply_kwh:localSupply,
+      battery_support_to_home_kwh:batteryToHome,
+      direct_solar_consumption_kwh:directSolar,
+      self_consumption_percent:solar>0?directSolar/solar*100:null,
+      self_sufficiency_percent:home>0?localSupply/home*100:null,
+      grid_dependency_percent:home>0?imp/home*100:null,
+      export_exceeds_solar:exp>solar+0.05,
+    };
+  }
   financePeriodData(period='today',finance={}){
+    // Finance consumes the shared allocation above. It no longer runs a private
+    // balance, so "Home consumption" on Finance / Energy Flow Intelligence and
+    // "Consumption" on Dashboard / Statistics are now the same number.
     const energy=this.periodData(period)||{},n=v=>Math.max(0,Number(v)||0);
-    const measuredHome=n(energy.house_energy_kwh),solar=n(energy.solar_energy_kwh),imp=n(energy.grid_import_energy_kwh),exp=n(energy.grid_export_energy_kwh),charge=n(energy.battery_charge_energy_kwh),discharge=n(energy.battery_discharge_energy_kwh);
-    // Whole-home Finance follows the physical energy balance used by HA Energy:
-    // direct solar = production - grid export - battery charging,
-    // home = grid import + direct solar + battery discharge support.
-    // A narrower/legacy house statistic must not cap these measured flows.
-    const directSolar=Math.max(0,solar-exp-charge);
-    const batteryToHome=Math.max(0,discharge);
-    const balancedHome=Math.max(0,imp+directSolar+batteryToHome);
-    const home=balancedHome>0?balancedHome:measuredHome;
-    const localHome=Math.max(0,home-imp);
-    return {...energy,finance_home_kwh:home,finance_measured_house_statistic_kwh:measuredHome,finance_home_balance_kwh:balancedHome,finance_solar_kwh:solar,finance_import_kwh:imp,finance_export_kwh:exp,finance_battery_charge_kwh:charge,finance_battery_discharge_kwh:discharge,finance_local_home_supply_kwh:localHome,finance_direct_solar_to_home_kwh:directSolar,finance_battery_support_to_home_kwh:batteryToHome,finance_battery_support_method:'measured_discharge',finance_avoided_import_kwh:directSolar+batteryToHome,finance_energy_authority:balancedHome>0?'whole_home_energy_balance':'canonical_period_energy'};
+    const a=this.periodEnergyAllocation(energy);
+    const solar=n(energy.solar_energy_kwh),imp=n(energy.grid_import_energy_kwh),exp=n(energy.grid_export_energy_kwh),charge=n(energy.battery_charge_energy_kwh),discharge=n(energy.battery_discharge_energy_kwh);
+    return {...energy,finance_home_kwh:a.home_consumption_kwh,finance_measured_house_statistic_kwh:a.measured_house_statistic_kwh,finance_home_balance_kwh:a.home_consumption_balance_kwh,finance_solar_kwh:solar,finance_import_kwh:imp,finance_export_kwh:exp,finance_battery_charge_kwh:charge,finance_battery_discharge_kwh:discharge,finance_local_home_supply_kwh:a.local_home_supply_kwh,finance_direct_solar_to_home_kwh:a.direct_solar_consumption_kwh,finance_battery_support_to_home_kwh:a.battery_support_to_home_kwh,finance_battery_support_method:'measured_discharge',finance_avoided_import_kwh:a.direct_solar_consumption_kwh+a.battery_support_to_home_kwh,finance_energy_authority:a.home_consumption_authority};
   }
   financePeriodValueData(period='today',finance={}){
     // Shared Finance-period value authority for the Finance UI and Copilot.
@@ -1146,20 +1188,22 @@ class AionEmsEnergyFlowDashboard extends HTMLElement {
     const hasToday=keys.some(k=>Number(todayRow[k])>0);
     const upsertToday=rows=>{const out=clean(rows),idx=out.findIndex(r=>String(r.date||'').slice(0,10)===todayKey);if(idx>=0)out[idx]={...out[idx],...todayRow};else if(hasToday)out.push(todayRow);return out.sort((a,b)=>String(a.date||'').localeCompare(String(b.date||'')));};
     const sumRows=(rows,date)=>{const out={date};for(const k of keys)out[k]=rows.reduce((n,r)=>n+(Number(r[k])||0),0);return out;};
+    // Chart series must use the same home-consumption authority as the tiles.
+    const canonical=rows=>rows.map(r=>{const a=this.periodEnergyAllocation(r);return {...r,house_energy_kwh_measured:a.measured_house_statistic_kwh,house_energy_kwh:a.home_consumption_kwh};});
     if(period==='today'){
       if(!hasToday)return [];
       const zero={date:`${todayKey}T00:00:00`,solar_energy_kwh:0,house_energy_kwh:0,grid_import_energy_kwh:0,grid_export_energy_kwh:0,battery_charge_energy_kwh:0,battery_discharge_energy_kwh:0};
       const now=new Date(),pad=n=>String(n).padStart(2,'0');
       const current={...todayRow,date:`${todayKey}T${pad(now.getHours())}:${pad(now.getMinutes())}:00`};
-      return [zero,current];
+      return canonical([zero,current]);
     }
     if(period==='week'){
       const rolling=upsertToday(chart.rolling_7||history.last_7_days||[]);
-      return rolling.slice(-7);
+      return canonical(rolling.slice(-7));
     }
-    if(period==='month')return upsertToday(chart.month).filter(r=>String(r.date||'').slice(0,7)===todayKey.slice(0,7));
-    if(period==='year'){const monthRows=upsertToday(chart.month).filter(r=>String(r.date||'').slice(0,4)===todayKey.slice(0,4)),currentMonth=sumRows(monthRows,todayKey.slice(0,7)),rows=clean(chart.year),idx=rows.findIndex(r=>String(r.date||'').slice(0,7)===todayKey.slice(0,7));if(idx>=0)rows[idx]={...rows[idx],...currentMonth};else if(keys.some(k=>Number(currentMonth[k])>0))rows.push(currentMonth);return rows.sort((a,b)=>String(a.date||'').localeCompare(String(b.date||''))).slice(-12);}
-    return clean(chart[period]||history.last_7_days);
+    if(period==='month')return canonical(upsertToday(chart.month).filter(r=>String(r.date||'').slice(0,7)===todayKey.slice(0,7)));
+    if(period==='year'){const monthRows=canonical(upsertToday(chart.month).filter(r=>String(r.date||'').slice(0,4)===todayKey.slice(0,4))),currentMonth=sumRows(monthRows,todayKey.slice(0,7)),rows=clean(chart.year),idx=rows.findIndex(r=>String(r.date||'').slice(0,7)===todayKey.slice(0,7));if(idx>=0)rows[idx]={...rows[idx],...currentMonth};else if(keys.some(k=>Number(currentMonth[k])>0))rows.push(currentMonth);return canonical(rows.sort((a,b)=>String(a.date||'').localeCompare(String(b.date||''))).slice(-12));}
+    return canonical(clean(chart[period]||history.last_7_days));
   }
   periodLabel(period=this._analyticsPeriod){return ({today:'Today',week:'Week',month:'Month',year:'Year',total:'Total'})[period]||'Week';}
   attr(id,name){return this.s(id)?.attributes?.[name];}
@@ -1689,8 +1733,9 @@ class AionEmsEnergyFlowDashboard extends HTMLElement {
 
     const importTariff=Math.max(0,n(finance.import_tariff));
     const exportTariff=Math.max(0,n(finance.export_tariff));
-    const directSolar=Math.max(0,Math.min(home,solar-exp));
-    const batterySupport=Math.max(0,Math.min(discharged,Math.max(0,home-imp-directSolar)));
+    const overviewAllocation=this.periodEnergyAllocation(today);
+    const directSolar=overviewAllocation.direct_solar_consumption_kwh;
+    const batterySupport=overviewAllocation.battery_support_to_home_kwh;
     const gridCost=imp*importTariff,exportIncome=exp*exportTariff;
     const savings=finance.net_savings_today??finance.net_benefit_today??finance.savings_today??finance.estimated_savings_today??((directSolar+batterySupport)*importTariff+exportIncome-gridCost);
     const currency=finance.currency||'CHF';
@@ -2281,7 +2326,7 @@ class AionEmsEnergyFlowDashboard extends HTMLElement {
     const capacity=Number(cfg.capacity_kwh||this._wizardData?.battery_capacity||0),cycles=capacity>0?throughput/(2*capacity):Number(predictive.estimated_equivalent_cycles||0);
     const configuredEfficiencyRaw=cfg.round_trip_efficiency??cfg.efficiency??null, configuredEfficiency=Number(configuredEfficiencyRaw), efficiency=Number.isFinite(configuredEfficiency)&&configuredEfficiency>0?(configuredEfficiency<=1?configuredEfficiency*100:configuredEfficiency):null;
     const batteryEvidenceAttrs=this.s('sensor.aion_ems_zeus_battery_performance_evidence')?.attributes||{},learnedRte=batteryEvidenceAttrs.learned_rte||{},learnedRtePct=Number(learnedRte.round_trip_efficiency_percent),learnedDirectional=Number(learnedRte.derived_charge_efficiency),learnedRteUsable=Number.isFinite(learnedRtePct)&&learnedRtePct>0,learnedRteStatus=String(learnedRte.status||'learning');
-    const batteryHome=Math.max(0,Number(data.battery_support_to_home_kwh)||Math.min(discharged,Math.max(0,Number(data.house_energy_kwh||0)-Math.max(0,Math.min(Number(data.house_energy_kwh||0),Number(data.solar_energy_kwh||0)-Number(data.grid_export_energy_kwh||0)-charged))))),impAvoided=Math.max(0,Number(data.battery_avoided_import_kwh??predictive.estimated_avoided_import_kwh??batteryHome)||batteryHome);
+    const batteryHome=Math.max(0,Number(data.battery_support_to_home_kwh)||this.periodEnergyAllocation(data).battery_support_to_home_kwh),impAvoided=Math.max(0,Number(data.battery_avoided_import_kwh??predictive.estimated_avoided_import_kwh??batteryHome)||batteryHome);
     const currency=finance.currency||'CHF',tariff=this.numberValue(finance.import_tariff,0),saving=impAvoided*tariff;
     const historyPeriod=['today','week','month'].includes(this._batteryHistoryPeriod)?this._batteryHistoryPeriod:'week';
     const rawHistoryRows=this.periodChartRows(historyPeriod),days=rawHistoryRows.map(row=>({date:String(row.date||''),battery_charge_energy_kwh:Number(row.battery_charge_energy_kwh||0),battery_discharge_energy_kwh:Number(row.battery_discharge_energy_kwh||0),battery_soc:Number.isFinite(Number(row.battery_soc))?Number(row.battery_soc):(Number.isFinite(Number(row.soc))?Number(row.soc):null)}));
@@ -2367,9 +2412,10 @@ class AionEmsEnergyFlowDashboard extends HTMLElement {
     const liveImp=Math.max(0,n(this.value('sensor.aion_ems_zeus_grid_import_power'))), liveExp=Math.max(0,n(this.value('sensor.aion_ems_zeus_grid_export_power')));
     const liveCharge=Math.max(0,n(this.value('sensor.aion_ems_zeus_battery_charge_power'))), liveDis=Math.max(0,n(this.value('sensor.aion_ems_zeus_battery_discharge_power')));
     const socRaw=this.s('sensor.aion_ems_zeus_battery_soc')?.state, soc=Number(socRaw);
-    const local=home>0?Math.max(0,Math.min(100,(home-imp)/home*100)):0;
-    const selfUse=solar>0?Math.max(0,Math.min(100,(solar-exp)/solar*100)):0;
-    const gridDep=home>0?Math.max(0,Math.min(100,imp/home*100)):0;
+    const todayAllocation=this.periodEnergyAllocation(today);
+    const local=Math.max(0,Math.min(100,Number(todayAllocation.self_sufficiency_percent)||0));
+    const selfUse=Math.max(0,Math.min(100,Number(todayAllocation.self_consumption_percent)||0));
+    const gridDep=Math.max(0,Math.min(100,Number(todayAllocation.grid_dependency_percent)||0));
     const raw=n(forecast.raw_expected_solar_next_24h_kwh,forecast.expected_solar_next_24h_kwh), corrected=n(forecast.expected_solar_next_24h_kwh,raw);
     const corr=adaptive.applied_correction_percent, trust=accuracy.trust_percent??adaptive.forecast_trust_percent, trustSamples=accuracy.sample_count??adaptive.forecast_trust_sample_count??0, learnConf=adaptive.learning_confidence_percent??learn.confidence_percent;
     const directSolarToHome=Math.max(0,n(financeToday.finance_direct_solar_to_home_kwh)), batterySupport=Math.max(0,n(financeToday.finance_battery_support_to_home_kwh));
@@ -2445,7 +2491,7 @@ class AionEmsEnergyFlowDashboard extends HTMLElement {
     const registrySummary=this.s('sensor.aion_ems_zeus_registry_summary')?.attributes||{}, registryCount=Math.max(0,n(registrySummary.device_count,Array.isArray(registrySummary.devices)?registrySummary.devices.length:0));
     const deaCoverage=registryCount>0&&deaMeasured>0?Math.max(0,Math.min(100,deaMeasured/registryCount*100)):null;
     const solar=n(today.solar_energy_kwh), home=n(today.house_energy_kwh), imp=n(today.grid_import_energy_kwh), exp=n(today.grid_export_energy_kwh);
-    const local=home>0?Math.max(0,Math.min(100,(home-imp)/home*100)):0, selfUse=solar>0?Math.max(0,Math.min(100,(solar-exp)/solar*100)):0, gridDep=home>0?Math.max(0,Math.min(100,imp/home*100)):0;
+    const alloc=this.periodEnergyAllocation(today), local=Math.max(0,Math.min(100,Number(alloc.self_sufficiency_percent)||0)), selfUse=Math.max(0,Math.min(100,Number(alloc.self_consumption_percent)||0)), gridDep=Math.max(0,Math.min(100,Number(alloc.grid_dependency_percent)||0));
     const raw=n(f.raw_expected_solar_next_24h_kwh,f.expected_solar_next_24h_kwh), corrected=n(f.expected_solar_next_24h_kwh,raw), corr=adaptive.applied_correction_percent;
     const score=perf.performance_score??perf.score??perf.energy_performance_score, delta=perf.performance_delta??perf.score_delta??perf.delta;
     const health=n(h.system_score??h.overall_score??h.score,q.quality_score??100), dq=q.quality_score??q.score;
@@ -2632,7 +2678,9 @@ class AionEmsEnergyFlowDashboard extends HTMLElement {
     if(usable.length<6)return {available:false,evidenceDays:usable.length,note:'Zeus needs at least 6 completed measured days. Today is excluded so a partial day cannot distort the trend.'};
     const half=Math.floor(usable.length/2),previousRows=usable.slice(0,half),recentRows=usable.slice(usable.length-half);
     const average=(list,key)=>list.reduce((n,r)=>n+Math.max(0,Number(r[key])||0),0)/Math.max(1,list.length);
-    const selfSuff=r=>{const home=Math.max(0,Number(r.house_energy_kwh)||0),solar=Math.max(0,Number(r.solar_energy_kwh)||0),exp=Math.max(0,Number(r.grid_export_energy_kwh)||0),dis=Math.max(0,Number(r.battery_discharge_energy_kwh)||0),direct=Math.min(Math.max(solar-exp,0),home);return home>0?Math.max(0,Math.min(100,(Math.min(home,direct+dis)/home)*100)):null;};
+    // Shared period allocation. This used the "solar - export" direct-solar
+    // definition, which disagreed with both the backend and the Finance pages.
+    const selfSuff=r=>{const v=this.periodEnergyAllocation(r).self_sufficiency_percent;return v==null?null:Math.max(0,Math.min(100,v));};
     const avgSelf=list=>{const vals=list.map(selfSuff).filter(Number.isFinite);return vals.length?vals.reduce((a,b)=>a+b,0)/vals.length:null;};
     const avgBattery=list=>list.reduce((n,r)=>n+Math.max(0,Number(r.battery_charge_energy_kwh)||0)+Math.max(0,Number(r.battery_discharge_energy_kwh)||0),0)/Math.max(1,list.length);
     const build=(label,icon,previous,recent,unit)=>{if(!Number.isFinite(previous)||!Number.isFinite(recent))return {label,icon,available:false};const absolute=recent-previous,pct=previous>0?(absolute/previous*100):null,threshold=unit==='%'?1:Math.max(.05,Math.abs(previous)*.03),direction=Math.abs(absolute)<threshold?'Stable':absolute>0?'Rising':'Falling';return {label,icon,available:true,previous,recent,absolute,pct,direction,unit};};
@@ -2693,15 +2741,13 @@ class AionEmsEnergyFlowDashboard extends HTMLElement {
     const next24Solar=Math.max(0,Number(forecast.expected_solar_next_24h_kwh)||0), next24Demand=Math.max(0,Number(forecast.expected_consumption_next_24h_kwh)||0);
     const forecastRangeLabel=forecastRange.low_kwh!=null&&forecastRange.high_kwh!=null?`${Number(forecastRange.low_kwh).toFixed(1)}–${Number(forecastRange.high_kwh).toFixed(1)} kWh`:'Range collecting';
     const solar=Number(t.solar_energy_kwh)||0,home=Number(t.house_energy_kwh)||0,imp=Number(t.grid_import_energy_kwh)||0,exp=Number(t.grid_export_energy_kwh)||0,batteryCharged=Math.max(0,Number(t.battery_charge_energy_kwh)||0),batteryDischarged=Math.max(0,Number(t.battery_discharge_energy_kwh)||0);
-    const canonicalFinance=this.financePeriodData(period,finance),reportedBatterySupport=Math.max(0,Number(canonicalFinance.finance_battery_support_to_home_kwh)||0),reportedDirectSolar=Math.max(0,Number(canonicalFinance.finance_direct_solar_to_home_kwh)||0);
-    // One measured routing contract owns Statistics after the HA Energy source-set
-    // correction. This prevents stale finance attribution from making Solar 0%
-    // or double-counting Battery support.
-    const measuredLocalSolar=Math.max(0,Math.min(home,solar-exp));
-    const directSolarToHome=(reportedDirectSolar>0&&reportedDirectSolar<=Math.min(home,solar)+0.05&&Math.abs(reportedDirectSolar-measuredLocalSolar)<=0.15)?reportedDirectSolar:measuredLocalSolar;
-    const measuredBatteryResidual=Math.max(0,home-imp-directSolarToHome);
-    const reportedRoutingCloses=Math.abs((directSolarToHome+imp+reportedBatterySupport)-home)<=0.15;
-    const batterySupport=reportedRoutingCloses?reportedBatterySupport:measuredBatteryResidual;
+    const canonicalFinance=this.financePeriodData(period,finance);
+    // Statistics and Finance now share one allocation, so the reconciliation
+    // that used to cross-check Finance against a second "solar - export"
+    // routing contract (and silently fell back to it) is no longer needed:
+    // both sides are the same numbers by construction.
+    const directSolarToHome=Math.max(0,Number(canonicalFinance.finance_direct_solar_to_home_kwh)||0);
+    const batterySupport=Math.max(0,Number(canonicalFinance.finance_battery_support_to_home_kwh)||0);
     const importTariff=Math.max(0,Number(finance.import_tariff)||0),exportTariff=Math.max(0,Number(finance.export_tariff)||0);
     const solarValue=solar*importTariff,consumptionValue=home*importTariff,importValue=imp*importTariff,exportValue=exp*exportTariff,batteryValue=batterySupport*importTariff;
     const measuredSelfSuff=home>0?Math.max(0,Math.min(100,(home-imp)/home*100)):null,measuredSelfUse=solar>0?Math.max(0,Math.min(100,directSolarToHome/solar*100)):null;
@@ -3541,7 +3587,7 @@ class AionEmsEnergyFlowDashboard extends HTMLElement {
     const t=this.periodData('today')||{},m=this.periodData('month')||{};
     const importTariff=this.numberValue(f.import_tariff,0),exportTariff=this.numberValue(f.export_tariff,0);
     const solar=this.numberValue(t.solar_energy_kwh,0),home=this.numberValue(t.house_energy_kwh,0),imp=this.numberValue(t.grid_import_energy_kwh??f.grid_import_kwh,0),exp=this.numberValue(t.grid_export_energy_kwh??f.grid_export_kwh,0),charge=this.numberValue(t.battery_charge_energy_kwh??f.battery_charge_kwh,0),discharge=this.numberValue(t.battery_discharge_energy_kwh??f.battery_discharge_kwh,0);
-    const directSolar=this.numberValue(f.direct_solar_to_home_kwh??t.direct_solar_consumption_kwh,Math.max(0,Math.min(home,solar-exp)));
+    const directSolar=this.numberValue(f.direct_solar_to_home_kwh??t.direct_solar_consumption_kwh,this.periodEnergyAllocation(t).direct_solar_consumption_kwh);
     const batteryToHome=this.numberValue(f.battery_support_to_home_kwh,Math.min(discharge,Math.max(home-directSolar,0)));
     const directSolarSavings=directSolar*importTariff,exportRevenue=exp*exportTariff,batterySavings=batteryToHome*importTariff,gridCost=imp*importTariff;
     const monthSolar=this.numberValue(m.solar_energy_kwh,0),monthImp=this.numberValue(m.grid_import_energy_kwh,0),monthExp=this.numberValue(m.grid_export_energy_kwh,0),monthDischarge=this.numberValue(m.battery_discharge_energy_kwh,0);
@@ -5375,7 +5421,7 @@ class AionEmsEnergyFlowDashboard extends HTMLElement {
     const rec=this.rec(),soc=this.value('sensor.aion_ems_zeus_battery_soc');
     const solar=Number(t.solar_energy_kwh)||0,home=Number(t.house_energy_kwh)||0,imp=Number(t.grid_import_energy_kwh)||0,exp=Number(t.grid_export_energy_kwh)||0;
     const selfSuff=Number(t.self_sufficiency_percent),selfUse=Number(t.self_consumption_percent);
-    const saving=Math.max(0,(Math.max(0,solar-exp)*Number(finance.import_tariff||0))+(exp*Number(finance.export_tariff||0)));
+    const saving=Math.max(0,(Number(canonicalFinance.finance_avoided_import_kwh)||0)*Number(finance.import_tariff||0)+(exp*Number(finance.export_tariff||0)));
     const co2Factor=Number(finance.co2_factor_kg_per_kwh??finance.grid_co2_kg_per_kwh??0.233),co2Saved=Math.max(0,Math.min(solar,home)*co2Factor);
     const batteryToHome=Math.max(0,Number(canonicalFinance.finance_battery_support_to_home_kwh)||0),directSolarToHome=Math.max(0,Number(canonicalFinance.finance_direct_solar_to_home_kwh)||0);
     const solarHomeShare=home>0?Math.max(0,Math.min(100,directSolarToHome/home*100)):0,batteryHomeShare=home>0?Math.max(0,Math.min(100,batteryToHome/home*100)):0;
@@ -5400,7 +5446,7 @@ class AionEmsEnergyFlowDashboard extends HTMLElement {
     const totalDev=Math.max(0.001,devices.reduce((n,d)=>n+(Number(d[devicePeriodKey])||0),0));
     const daily=Array.isArray(forecast.daily_forecast)?forecast.daily_forecast.slice(0,3):[];
     const best=history.best_solar_day||{},peak=history.peak_consumption_day||{};
-    const direct=Math.max(0,Math.min(solar-exp,home)),battery=Number(t.battery_discharge_energy_kwh)||0,other=Math.max(0,home-direct-battery-imp);
+    const supply=this.periodEnergyAllocation(t),direct=supply.direct_solar_consumption_kwh,battery=supply.battery_support_to_home_kwh,other=Math.max(0,home-direct-battery-imp);
     const batteryPlan=this.s('sensor.aion_ems_zeus_predictive_battery')?.attributes||{},batteryTimeline=Array.isArray(batteryPlan.timeline)?batteryPlan.timeline:[];
     const chargeEnergy=Number(t.battery_charge_energy_kwh)||0,dischargeEnergy=Number(t.battery_discharge_energy_kwh)||0,throughput=chargeEnergy+dischargeEnergy;
     const batteryEfficiency=chargeEnergy>0?Math.min(100,Math.max(0,dischargeEnergy/chargeEnergy*100)):null;
@@ -7125,8 +7171,9 @@ class AionEmsEnergyFlowDashboard extends HTMLElement {
     const avg=k=>days?recent.reduce((n,r)=>n+(Number(r[k])||0),0)/days:0;
     const total=k=>recent.reduce((n,r)=>n+(Number(r[k])||0),0);
     const solar=total('solar_energy_kwh'),home=total('house_energy_kwh'),imp=total('grid_import_energy_kwh'),exp=total('grid_export_energy_kwh'),charged=total('battery_charge_energy_kwh'),discharged=total('battery_discharge_energy_kwh');
-    const selfUsed=Math.max(0,Math.min(solar,solar-exp));
-    const selfConsumption=solar>0?Math.max(0,Math.min(100,selfUsed/solar*100)):null;
+    const behaviourAllocation=this.periodEnergyAllocation({solar_energy_kwh:solar,house_energy_kwh:home,grid_import_energy_kwh:imp,grid_export_energy_kwh:exp,battery_charge_energy_kwh:charged,battery_discharge_energy_kwh:discharged});
+    const selfUsed=behaviourAllocation.direct_solar_consumption_kwh;
+    const selfConsumption=behaviourAllocation.self_consumption_percent==null?null:Math.max(0,Math.min(100,behaviourAllocation.self_consumption_percent));
     const solarCoverage=home>0?Math.max(0,Math.min(100,selfUsed/home*100)):null;
     const batteryThroughput=charged+discharged;
     const batteryBalance=charged>0?Math.max(0,Math.min(100,discharged/charged*100)):null;

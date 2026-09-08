@@ -496,7 +496,25 @@ class HistoricalAnalyticsEngine:
         house = result["house_energy_kwh"]
         imported = result["grid_import_energy_kwh"]
         exported = result["grid_export_energy_kwh"]
+        battery_charge = result["battery_charge_energy_kwh"]
         battery_discharge = result["battery_discharge_energy_kwh"]
+
+        # One home-consumption rule across Zeus: a measured whole-home statistic
+        # is authoritative, otherwise the same energy balance EnergyFlowEngine
+        # uses for live House Power. Without this fallback an installation with
+        # no whole-home meter reported 0 kWh here while the frontend Finance
+        # surfaces showed their own balance, so the two disagreed by the whole
+        # of home consumption.
+        balance_house = max(solar + imported + battery_discharge - exported - battery_charge, 0.0)
+        if house > 0:
+            house_authority = "measured_house_statistic"
+        else:
+            house = balance_house
+            house_authority = "whole_home_energy_balance"
+            result["house_energy_kwh"] = round(house, 3)
+        result["home_consumption_kwh"] = round(house, 3)
+        result["home_consumption_balance_kwh"] = round(balance_house, 3)
+        result["home_consumption_authority"] = house_authority
 
         # v14.0.0-alpha.22.13.4.1.3: do not assume every exported kWh came
         # from current-period PV.  Battery discharge (and future local sources)
@@ -508,6 +526,7 @@ class HistoricalAnalyticsEngine:
         local_home_supply = max(house - imported, 0.0)
         battery_to_home = min(max(battery_discharge, 0.0), local_home_supply)
         direct_solar = min(max(solar, 0.0), max(local_home_supply - battery_to_home, 0.0))
+        result["local_home_supply_kwh"] = round(local_home_supply, 3)
         result["battery_support_to_home_kwh"] = round(battery_to_home, 3)
         result["direct_solar_consumption_kwh"] = round(direct_solar, 3)
         result["self_consumption_percent"] = round(direct_solar / solar * 100, 1) if solar > 0 else None
