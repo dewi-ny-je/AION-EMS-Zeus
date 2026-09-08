@@ -8,6 +8,8 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Any
 
+from ..flow_access import flow_soc, flow_w
+
 from homeassistant.helpers.storage import Store
 
 
@@ -91,14 +93,6 @@ class DecisionEngine:
             return float(value)
         except (TypeError, ValueError):
             return default
-
-    @classmethod
-    def _first_number(cls, data: dict[str, Any], keys: tuple[str, ...], default: float = 0.0) -> float:
-        for key in keys:
-            if data.get(key) is not None:
-                value = cls._number(data.get(key), default)
-                return value
-        return default
 
     def _flexible_loads(self) -> list[dict[str, Any]]:
         try:
@@ -212,11 +206,14 @@ class DecisionEngine:
         quality_data = self._summary(self.core.data_quality)
         optimizer = self._summary(self.core.optimizer)
 
-        export_w = self._first_number(flow, ("grid_export_power", "grid_export_power_w", "export_power_w"))
-        import_w = self._first_number(flow, ("grid_import_power", "grid_import_power_w", "import_power_w"))
-        solar_w = self._first_number(flow, ("solar_power", "solar_power_w", "pv_power_w"))
-        house_w = self._first_number(flow, ("house_power", "house_power_w", "home_power_w"))
-        soc = self._first_number(flow, ("battery_soc_percent", "battery_soc", "soc_percent"), -1.0)
+        # Canonical Energy Flow access. These reads previously targeted the top
+        # level of the snapshot and always returned the default, so no surplus
+        # was ever observed and no opportunity could be raised.
+        export_w = flow_w(flow, "grid_export_power", 0.0)
+        import_w = flow_w(flow, "grid_import_power", 0.0)
+        solar_w = flow_w(flow, "solar_power", 0.0)
+        house_w = flow_w(flow, "house_power", 0.0)
+        soc = flow_soc(flow, -1.0)
         forecast_conf = self._number(forecast.get("confidence_percent") or forecast.get("confidence"), 0.0)
         learning_conf = self._number(learning.get("confidence_percent") or learning.get("confidence"), 0.0)
         quality = self._number(quality_data.get("quality_score") or quality_data.get("score"), 100.0)

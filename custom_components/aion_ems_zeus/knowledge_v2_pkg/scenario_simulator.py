@@ -4,6 +4,8 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Any
 
+from ..flow_access import flow_w
+
 
 class ScenarioSimulator:
     """Compare advisory execution choices without calling Home Assistant services."""
@@ -32,7 +34,10 @@ class ScenarioSimulator:
         title = str(opportunity.get("title") or "No verified opportunity")
         target = str(opportunity.get("target_name") or "")
         confidence = int(self._number(opportunity.get("confidence_percent"), 0))
-        export_w = self._number((self.core.energy_flow.summary() or {}).get("grid_export_power_w") or (self.core.energy_flow.summary() or {}).get("grid_export_power"), 0)
+        # Canonical Energy Flow access. Both previous keys were top-level and
+        # always None, so every scenario was sized off the 1000 W default rather
+        # than the measured surplus.
+        export_w = flow_w(self.core.energy_flow.summary(), "grid_export_power", 0.0)
         rated_w = self._number(opportunity.get("rated_power_w"), export_w if export_w > 0 else 1000)
         covered_w = min(max(0, export_w), max(0, rated_w))
         duration_h = max(0.25, self._number(opportunity.get("estimated_duration_hours"), 1.0))
