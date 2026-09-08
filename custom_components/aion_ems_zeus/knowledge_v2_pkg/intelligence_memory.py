@@ -51,11 +51,17 @@ class IntelligenceMemoryEngine:
         exported = self._num(source.get("grid_export_energy_kwh"))
         charge = self._num(source.get("battery_charge_energy_kwh"))
         discharge = self._num(source.get("battery_discharge_energy_kwh"))
-        self_consumption = None
-        if solar is not None and solar > 0 and exported is not None:
-            self_consumption = max(0.0, min(100.0, (solar - exported) / solar * 100.0))
-        self_sufficiency = None
-        if home is not None and home > 0 and imported is not None:
+        # Daily summaries already carry Zeus's canonical period allocation. Reuse
+        # it instead of re-deriving self-consumption as solar-export, because
+        # exported energy can include battery discharge on hybrid systems.
+        self_consumption = self._num(source.get("self_consumption_percent"))
+        self_sufficiency = self._num(source.get("self_sufficiency_percent"))
+        if self_consumption is None and solar is not None and solar > 0 and home is not None and imported is not None:
+            local_supply = max(0.0, home - imported)
+            battery_to_home = min(max(0.0, discharge or 0.0), local_supply)
+            direct_solar = min(max(0.0, solar), max(0.0, local_supply - battery_to_home))
+            self_consumption = max(0.0, min(100.0, direct_solar / solar * 100.0))
+        if self_sufficiency is None and home is not None and home > 0 and imported is not None:
             self_sufficiency = max(0.0, min(100.0, (home - imported) / home * 100.0))
         weather = getattr(self.core, "weather", None)
         weather_summary = weather.summary() if weather and hasattr(weather, "summary") else {}

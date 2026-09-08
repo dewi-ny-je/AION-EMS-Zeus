@@ -4,6 +4,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
+from .flow_access import flow_soc, flow_w
+
 
 @dataclass(frozen=True)
 class RootCauseAssessment:
@@ -65,12 +67,15 @@ class RootCauseIntelligenceEngine:
         qa = self._summary(self.core.qa_diagnostics)
         runtime = self._summary(self.core.runtime_resilience)
 
-        solar = self._number(flow.get("solar_power_w"), flow.get("solar_w"), flow.get("pv_power_w")) or 0.0
-        home = self._number(flow.get("house_power_w"), flow.get("home_power_w"), flow.get("load_power_w")) or 0.0
-        grid_import = self._number(flow.get("grid_import_w"), flow.get("import_power_w")) or 0.0
-        grid_export = self._number(flow.get("grid_export_w"), flow.get("export_power_w")) or 0.0
-        battery_soc = self._number(flow.get("battery_soc"), flow.get("battery_soc_percent"))
-        battery_discharge = self._number(flow.get("battery_discharge_w"), flow.get("battery_power_out_w")) or 0.0
+        # Use the canonical Energy Flow accessor. The snapshot stores live power
+        # under summary()["flows"][field]["w"], so flat top-level reads can
+        # silently turn valid measurements into 0 W.
+        solar = flow_w(flow, "solar_power", 0.0) or 0.0
+        home = flow_w(flow, "house_power", 0.0) or 0.0
+        grid_import = flow_w(flow, "grid_import_power", 0.0) or 0.0
+        grid_export = flow_w(flow, "grid_export_power", 0.0) or 0.0
+        battery_soc = flow_soc(flow)
+        battery_discharge = flow_w(flow, "battery_discharge_power", 0.0) or 0.0
 
         weather_condition = str(weather.get("condition") or weather.get("state") or "").lower()
         forecast_conf = self._number(forecast.get("confidence_percent"), forecast.get("confidence"))

@@ -10,6 +10,8 @@ from collections import defaultdict
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
+from ..flow_access import flow_soc, flow_w
+
 
 class LearningEngineV2:
     """Long-term and seasonal learning from recorder-safe daily summaries."""
@@ -905,17 +907,19 @@ class ConversationalZeusAssistant:
         consistency = self.data_consistency.summary() if self.data_consistency is not None else {}
         accounting_conf = consistency.get("confidence") if isinstance(consistency.get("confidence"), dict) else {}
         device_summary = self.device_analytics.summary() if self.device_analytics is not None else {}
-        solar = self._num(flows.get("solar_power"))
-        wind = self._num(flows.get("wind_power"))
-        generator = self._num(flows.get("generator_power"))
-        generation = self._num(flows.get("generation_power"))
+        # Canonical Energy Flow access. Solar/Home/Grid are {w, kw} payloads;
+        # passing those dicts to _num() produced 0 W in Conversational Zeus.
+        solar = flow_w(flows, "solar_power", 0.0) or 0.0
+        wind = flow_w(flows, "wind_power", 0.0) or 0.0
+        generator = flow_w(flows, "generator_power", 0.0) or 0.0
+        generation = self._num((flows.get("generation_power") or {}).get("w"))
         source_mix = flows.get("generation_source_mix_today_percent") or {}
         source_energy = flows.get("generation_energy_sources_today_kwh") or {}
-        home = self._num(flows.get("house_power"))
-        imp = self._num(flows.get("grid_import_power"))
-        exp = self._num(flows.get("grid_export_power"))
-        soc_raw = flows.get("battery_soc_percent")
-        soc = self._num(soc_raw, -1) if soc_raw is not None else -1
+        home = flow_w(flows, "house_power", 0.0) or 0.0
+        imp = flow_w(flows, "grid_import_power", 0.0) or 0.0
+        exp = flow_w(flows, "grid_export_power", 0.0) or 0.0
+        soc_value = flow_soc(flows)
+        soc = self._num(soc_value, -1) if soc_value is not None else -1
         charge_w = self._num((flows.get("battery_charge_power") or {}).get("w"))
         discharge_w = self._num((flows.get("battery_discharge_power") or {}).get("w"))
         battery_deadband_w = 25.0
