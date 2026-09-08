@@ -5,6 +5,8 @@ from __future__ import annotations
 from datetime import datetime, timedelta
 from typing import Any
 
+from .flow_access import flow_w
+
 
 class OptimizationIntelligenceEngine:
     """Quantify and rank opportunities from existing canonical Zeus engines.
@@ -49,19 +51,11 @@ class OptimizationIntelligenceEngine:
         return max(0.0, min(100.0, value))
 
     def _flow_w(self, flows: dict[str, Any], *keys: str) -> float | None:
-        """Return an explicitly present live power value without inventing zero."""
+        """Return explicitly present live power through the canonical accessor."""
         for key in keys:
-            if key not in flows:
-                continue
-            value = flows.get(key)
-            if isinstance(value, dict):
-                if value.get("w") is not None:
-                    return self._number(value.get("w"))
-                if value.get("kw") is not None:
-                    number = self._number(value.get("kw"))
-                    return None if number is None else number * 1000.0
-            elif value is not None:
-                return self._number(value)
+            value = flow_w(flows, key)
+            if value is not None:
+                return value
         return None
 
     def _daily_rows(self) -> list[dict[str, Any]]:
@@ -577,7 +571,10 @@ class OptimizationIntelligenceEngine:
         export_w = self._flow_w(flows, "grid_export_power", "grid_export_power_w", "grid_export_w")
         battery_charge_w = self._flow_w(flows, "battery_charge_power", "battery_charge_power_w")
         battery_discharge_w = self._flow_w(flows, "battery_discharge_power", "battery_discharge_power_w")
-        battery_signed_w = self._flow_w(flows, "battery_power", "battery_power_w")
+        battery_signed_w = self._flow_w(flows, "net_battery_power", "battery_power", "battery_power_w")
+        net_grid_w = self._flow_w(flows, "net_grid_power")
+        if net_grid_w is None and (import_w is not None or export_w is not None):
+            net_grid_w = (import_w or 0.0) - (export_w or 0.0)
         soc = self._number(flows.get("battery_soc_percent", flow.get("battery_soc_percent")))
 
         schedule = self._scheduler_rows(scheduler)
@@ -1335,8 +1332,8 @@ class OptimizationIntelligenceEngine:
         # Live power evidence describes current direction only. It is never
         # integrated into invented kWh actuals.
         live_surplus_w = None
-        if export_w is not None and import_w is not None:
-            live_surplus_w = max(0.0, export_w - import_w)
+        if net_grid_w is not None:
+            live_surplus_w = max(0.0, -net_grid_w)
         elif export_w is not None:
             live_surplus_w = max(0.0, export_w)
 

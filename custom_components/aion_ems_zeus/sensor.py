@@ -19,6 +19,7 @@ from homeassistant.helpers.restore_state import RestoreEntity
 from homeassistant.helpers import entity_registry as er
 
 from .const import DOMAIN, NAME, VERSION
+from .flow_access import flow_w
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -1437,6 +1438,143 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_e
     def _device_manager_state(core) -> str:
         return str(_device_manager_attributes(core).get("status") or "Not run")
 
+    def _decision_engine_attributes(core) -> dict[str, Any]:
+        """Expose a compact Decision Engine snapshot safe for HA state attributes.
+
+        The Decision Engine keeps its complete evidence, lifecycle and history
+        internally.  This sensor publishes only the fields consumed by the Zeus
+        frontend and useful HA diagnostics so the live entity itself remains
+        safely below Home Assistant's 16 KiB state-attribute ceiling.
+        """
+        data = dict(core.decision_engine.summary() or {})
+
+        def short(value: Any, limit: int = 360) -> Any:
+            if not isinstance(value, str):
+                return value
+            return value if len(value) <= limit else value[: max(0, limit - 1)] + "…"
+
+        def compact_gate(value: Any) -> dict[str, Any]:
+            gate = value if isinstance(value, dict) else {}
+            return {
+                "eligible": bool(gate.get("eligible", False)),
+                "score_percent": gate.get("score_percent"),
+                "passed": gate.get("passed"),
+                "total": gate.get("total"),
+            }
+
+        def compact_opportunity(row: Any) -> dict[str, Any] | None:
+            if not isinstance(row, dict):
+                return None
+            return {
+                "id": row.get("id"),
+                "rank": row.get("rank"),
+                "title": short(row.get("title"), 180),
+                "action": short(row.get("action"), 220),
+                "target_id": row.get("target_id"),
+                "target_name": short(row.get("target_name"), 120),
+                "category": row.get("category"),
+                "priority": row.get("priority"),
+                "priority_score": row.get("priority_score"),
+                "status": row.get("status"),
+                "best_window": short(row.get("best_window"), 160),
+                "reason": short(row.get("reason"), 360),
+                "expected_benefit": short(row.get("expected_benefit"), 280),
+                "expected_benefit_value_kwh": row.get("expected_benefit_value_kwh"),
+                "confidence_percent": row.get("confidence_percent"),
+                "confidence_breakdown": dict(row.get("confidence_breakdown") or {}),
+                "risk": row.get("risk"),
+                "alternatives": [short(v, 160) for v in list(row.get("alternatives") or [])[:3]],
+                "quality_gate": compact_gate(row.get("quality_gate")),
+                "eligible": bool(row.get("eligible", False)),
+                "created_at": row.get("created_at"),
+                "updated_at": row.get("updated_at"),
+            }
+
+        def compact_history(row: Any) -> dict[str, Any] | None:
+            if not isinstance(row, dict):
+                return None
+            def context(value: Any) -> dict[str, Any] | None:
+                if not isinstance(value, dict):
+                    return None
+                return {
+                    "solar_w": value.get("solar_w"),
+                    "home_w": value.get("home_w"),
+                    "grid_import_w": value.get("grid_import_w"),
+                    "grid_export_w": value.get("grid_export_w"),
+                    "battery_soc_percent": value.get("battery_soc_percent"),
+                }
+            return {
+                "id": row.get("id"),
+                "title": short(row.get("title"), 160),
+                "action": short(row.get("action"), 200),
+                "target_name": short(row.get("target_name"), 100),
+                "category": row.get("category"),
+                "status": row.get("status"),
+                "priority": row.get("priority"),
+                "priority_score": row.get("priority_score"),
+                "best_window": short(row.get("best_window"), 120),
+                "expected_benefit": short(row.get("expected_benefit"), 220),
+                "actual_benefit": short(row.get("actual_benefit"), 180),
+                "outcome_status": row.get("outcome_status"),
+                "measurement_note": short(row.get("measurement_note"), 260),
+                "confidence_percent": row.get("confidence_percent"),
+                "created_at": row.get("created_at"),
+                "updated_at": row.get("updated_at"),
+                "resolved_at": row.get("resolved_at"),
+                "detected_context": context(row.get("detected_context")),
+                "resolved_context": context(row.get("resolved_context")),
+            }
+
+        opportunities = [x for x in (compact_opportunity(v) for v in list(data.get("opportunities") or [])[:4]) if x]
+        eligible = [x for x in (compact_opportunity(v) for v in list(data.get("eligible_opportunities") or [])[:4]) if x]
+        history = [x for x in (compact_history(v) for v in list(data.get("recommendation_history") or [])[:12]) if x]
+
+        payload = {
+            "status": data.get("status"),
+            "version": data.get("version"),
+            "mode": data.get("mode"),
+            "decision": short(data.get("decision"), 220),
+            "best_recommendation_id": data.get("best_recommendation_id"),
+            "category": data.get("category"),
+            "reason": short(data.get("reason"), 360),
+            "expected_benefit": short(data.get("expected_benefit"), 280),
+            "best_window": short(data.get("best_window"), 160),
+            "priority_score": data.get("priority_score"),
+            "priority": data.get("priority"),
+            "confidence_percent": data.get("confidence_percent"),
+            "confidence_breakdown": dict(data.get("confidence_breakdown") or {}),
+            "risk": data.get("risk"),
+            "opportunities": opportunities,
+            "eligible_opportunities": eligible,
+            "eligible_count": data.get("eligible_count", len(eligible)),
+            "suppressed_count": data.get("suppressed_count", 0),
+            "recommendation_quality_gate": compact_gate(data.get("recommendation_quality_gate")),
+            "recommendation_history": history,
+            "recommendation_history_visible_count": len(history),
+            "recommendation_history_total_count": sum(int(v or 0) for v in dict(data.get("history_counts") or {}).values()),
+            "history_counts": dict(data.get("history_counts") or {}),
+            "history_active_opportunity_count": data.get("history_active_opportunity_count"),
+            "live_context": dict(data.get("live_context") or {}),
+            "updated_at": data.get("updated_at"),
+            "recorder_safe": True,
+            "attribute_payload_policy": "compact_live_summary",
+            "full_detail_location": "Zeus internal Decision Engine / UI",
+            "safety": short(data.get("safety"), 220),
+        }
+
+        # Hard safety ceiling for the *actual live entity attributes*, not merely
+        # Recorder filtering. If unusual names/reasons still make the payload too
+        # large, progressively shorten history first, then opportunity lists.
+        while _json_payload_bytes(payload) > 12000 and payload["recommendation_history"]:
+            payload["recommendation_history"].pop()
+            payload["recommendation_history_visible_count"] = len(payload["recommendation_history"])
+        while _json_payload_bytes(payload) > 12000 and len(payload["opportunities"]) > 1:
+            payload["opportunities"].pop()
+        while _json_payload_bytes(payload) > 12000 and len(payload["eligible_opportunities"]) > 1:
+            payload["eligible_opportunities"].pop()
+        payload["attribute_payload_bytes"] = _json_payload_bytes(payload)
+        return payload
+
     def _plugin_attributes(core, plugin_id: str) -> dict[str, Any]:
         """Return one plugin's discovery payload on a dedicated sensor."""
         data = core.integration_hub.summary() or {}
@@ -1509,7 +1647,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_e
         SimpleSensor(coordinator, core, "Executive Briefing", "executive_briefing", "mdi:newspaper-variant-outline", lambda c: c.executive_briefing.summary().get("headline"), lambda c: c.executive_briefing.summary()),
         SimpleSensor(coordinator, core, "Opportunity Learning", "opportunity_learning", "mdi:school-outline", lambda c: c.opportunity_learning.summary().get("status"), lambda c: c.opportunity_learning.summary()),
         SimpleSensor(coordinator, core, "Adaptive Advisor", "adaptive_advisor", "mdi:account-sync-outline", lambda c: c.adaptive_advisor.summary().get("status"), lambda c: c.adaptive_advisor.summary()),
-        SimpleSensor(coordinator, core, "Decision Engine", "decision_engine", "mdi:source-branch-check", lambda c: c.decision_engine.summary().get("decision"), lambda c: c.decision_engine.summary()),
+        SimpleSensor(coordinator, core, "Decision Engine", "decision_engine", "mdi:source-branch-check", lambda c: c.decision_engine.summary().get("decision"), _decision_engine_attributes),
         SimpleSensor(coordinator, core, "Scenario Simulator", "scenario_simulator", "mdi:compare-horizontal", lambda c: c.scenario_simulator.summary().get("status"), lambda c: c.scenario_simulator.summary()),
         SimpleSensor(coordinator, core, "Prediction Accuracy", "prediction_accuracy", "mdi:target-account", lambda c: c.prediction_accuracy.summary().get("status"), lambda c: c.prediction_accuracy.summary()),
         ForecastExplorerDataSensor(coordinator, core, "Forecast Explorer Data", "forecast_explorer_data", "mdi:chart-timeline-variant-shimmer"),
@@ -2020,17 +2158,11 @@ class EVSurplusGridSignalSensor(CoordinatorEntity, SensorEntity):
 
     def _snapshot(self) -> tuple[float | None, dict[str, Any]]:
         flow = self.core.energy_flow.summary() or {}
-        flows = flow.get("flows") or {}
-        imp = flows.get("grid_import_power")
-        exp = flows.get("grid_export_power")
-        imp_w = imp.get("w") if isinstance(imp, dict) else None
-        exp_w = exp.get("w") if isinstance(exp, dict) else None
-        try:
-            imp_w = max(float(imp_w or 0.0), 0.0)
-            exp_w = max(float(exp_w or 0.0), 0.0)
-        except (TypeError, ValueError):
+        value = flow_w(flow, "net_grid_power")
+        if value is None:
             return None, {"available": False, "safety": "Read-only signal. No charger control."}
-        value = imp_w - exp_w
+        imp_w = max(value, 0.0)
+        exp_w = max(-value, 0.0)
         return round(value, 1), {
             "available": True,
             "grid_import_w": round(imp_w, 1),

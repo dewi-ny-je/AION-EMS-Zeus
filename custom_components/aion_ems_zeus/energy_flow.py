@@ -56,6 +56,33 @@ class EnergyFlowEngine:
             value *= 1000000.0
         return max(0.0, value)
 
+    def _state_power_w_signed(self, entity_id: str | None) -> float | None:
+        if not entity_id:
+            return None
+        state = self.energy_mapping.hass.states.get(entity_id)
+        if state is None or str(state.state).strip().lower() in {"unknown", "unavailable", "none", ""}:
+            return None
+        try:
+            value = float(state.state)
+        except (TypeError, ValueError):
+            return None
+        unit = str(state.attributes.get("unit_of_measurement") or "W").strip().lower()
+        if unit == "kw":
+            value *= 1000.0
+        elif unit == "mw":
+            value *= 1000000.0
+        return value
+
+    def _registry_battery_signed_w(self) -> float | None:
+        devices = (self.registry.data.get("devices", []) if self.registry else [])
+        values = [
+            self._state_power_w_signed(device.get("power_entity"))
+            for device in devices
+            if isinstance(device, dict) and device.get("enabled", True) and str(device.get("type") or "") == "battery"
+        ]
+        readable = [value for value in values if value is not None]
+        return sum(readable) if readable else None
+
     def _registry_device_values(self) -> tuple[list[dict[str, Any]], dict[str, float]]:
         devices_out: list[dict[str, Any]] = []
         totals: dict[str, float] = {}
@@ -159,6 +186,10 @@ class EnergyFlowEngine:
         snapshot_started = datetime.now(timezone.utc)
         mapping = self.energy_mapping.refresh()
         mapped = mapping.get("mapped", {})
+        configured_fields = {
+            field for field, entity_id in (mapping.get("mappings", {}) or {}).items()
+            if str(entity_id or "").strip()
+        }
 
         solar = self._value(mapped, "solar_power")
         wind = self._value(mapped, "wind_power")
@@ -185,6 +216,12 @@ class EnergyFlowEngine:
                 grid_import = max(normalized_grid, 0.0)
             if grid_export is None:
                 grid_export = max(-normalized_grid, 0.0)
+        grid_evidence_missing = sorted(
+            field for field, value in (("grid_import_power", grid_import), ("grid_export_power", grid_export))
+            if value is None and field in configured_fields
+        )
+        if grid_mode == "bidirectional" and "grid_power" in configured_fields and grid_power is None:
+            grid_evidence_missing = sorted(set(grid_evidence_missing) | {"grid_power"})
         registered_devices, device_totals = self._registry_device_values()
         battery_options = mapping.get("mapping_options", {})
         battery_mode = battery_options.get("battery_mode", "separate" if (self._value(mapped, "battery_charge_power") is not None or self._value(mapped, "battery_discharge_power") is not None) else "bidirectional")
@@ -223,19 +260,39 @@ class EnergyFlowEngine:
             mapped_battery_discharge = max(-dc_power_w, 0.0)
             battery_mode = "byd_dc_hybrid"
 
+        registry_battery_w = self._registry_battery_signed_w()
+        battery_source = "mapped_channels"
+        battery_registry_magnitude_only = False
+        raw_battery_power: float | None = None
+        effective_battery_sign = battery_sign
+
         if battery_mode in {"separate", "byd_dc_hybrid"}:
-            battery_charge = max(mapped_battery_charge or 0.0, 0.0) if mapped_battery_charge is not None else 0.0
-            battery_discharge = max(mapped_battery_discharge or 0.0, 0.0) if mapped_battery_discharge is not None else 0.0
-            battery_power = battery_discharge - battery_charge if (mapped_battery_charge is not None or mapped_battery_discharge is not None) else device_totals.get("battery")
+            if mapped_battery_charge is not None or mapped_battery_discharge is not None:
+                battery_charge = max(mapped_battery_charge or 0.0, 0.0) if mapped_battery_charge is not None else 0.0
+                battery_discharge = max(mapped_battery_discharge or 0.0, 0.0) if mapped_battery_discharge is not None else 0.0
+                battery_power = battery_discharge - battery_charge
+            elif registry_battery_w is None:
+                battery_charge = 0.0
+                battery_discharge = 0.0
+                battery_power = None
+                battery_source = "no_battery_evidence"
+            elif abs(float(registry_battery_w)) <= 1.0:
+                battery_charge = 0.0
+                battery_discharge = 0.0
+                battery_power = 0.0
+                battery_source = "registry_devices_idle"
+            else:
+                battery_charge = None
+                battery_discharge = None
+                battery_power = None
+                battery_source = "registry_devices_magnitude_only"
+                battery_registry_magnitude_only = True
         else:
-            raw_battery_power = mapped_battery_power if mapped_battery_power is not None else device_totals.get("battery")
-            if battery_sign == "unsigned_magnitude":
-                # Magnitude-only sensors contain no directional evidence while the
-                # battery is moving power. At a genuine zero/idle reading, however,
-                # direction is irrelevant: both charge and discharge are safely 0 W.
-                # Publishing that idle state lets House Power use the normal energy
-                # balance fallback instead of becoming unavailable just because an
-                # unsigned bidirectional battery sensor is mapped.
+            raw_battery_power = mapped_battery_power if mapped_battery_power is not None else registry_battery_w
+            if mapped_battery_power is None and registry_battery_w is not None:
+                battery_source = "registry_devices_magnitude_only"
+                effective_battery_sign = "unsigned_magnitude"
+            if effective_battery_sign == "unsigned_magnitude":
                 if raw_battery_power is not None and abs(float(raw_battery_power)) <= 1.0:
                     battery_power = 0.0
                     battery_charge = 0.0
@@ -244,11 +301,19 @@ class EnergyFlowEngine:
                     battery_power = None
                     battery_charge = None
                     battery_discharge = None
+                    battery_registry_magnitude_only = battery_source == "registry_devices_magnitude_only"
             else:
-                normalized_battery = raw_battery_power if battery_sign == "positive_discharge" else (-raw_battery_power if raw_battery_power is not None else None)
+                normalized_battery = raw_battery_power if effective_battery_sign == "positive_discharge" else (-raw_battery_power if raw_battery_power is not None else None)
                 battery_charge = abs(normalized_battery) if normalized_battery is not None and normalized_battery < 0 else 0.0
                 battery_discharge = normalized_battery if normalized_battery is not None and normalized_battery > 0 else 0.0
                 battery_power = normalized_battery
+
+        battery_evidence_missing = sorted(
+            field for field, value in (("battery_charge_power", mapped_battery_charge), ("battery_discharge_power", mapped_battery_discharge))
+            if value is None and field in configured_fields
+        )
+        if battery_mode == "bidirectional" and "battery_power" in configured_fields and mapped_battery_power is None:
+            battery_evidence_missing = sorted(set(battery_evidence_missing) | {"battery_power"})
         battery_soc = self._value(mapped, "battery_soc")
 
         # A hybrid inverter's AC output can contain both PV and battery energy.
@@ -276,21 +341,24 @@ class EnergyFlowEngine:
 
         house_source = "measured" if house is not None else "unavailable"
         battery_direction_ambiguous = (
-            battery_mode == "bidirectional"
-            and battery_sign == "unsigned_magnitude"
-            and raw_battery_power is not None
-            and abs(float(raw_battery_power)) > 1.0
+            (battery_mode == "bidirectional" and effective_battery_sign == "unsigned_magnitude" and raw_battery_power is not None and abs(float(raw_battery_power)) > 1.0)
+            or battery_registry_magnitude_only
         )
+        missing_evidence = sorted(set(grid_evidence_missing) | set(battery_evidence_missing))
         if house is None and solar is not None and (grid_import is not None or grid_export is not None):
             if battery_direction_ambiguous:
-                # Without battery direction, the energy-balance equation has two
-                # valid answers. Do not guess and do not publish a false House Power.
                 house = None
                 house_source = "ambiguous_battery_direction"
+            elif missing_evidence:
+                house = None
+                house_source = "incomplete_flow_evidence"
             else:
                 house = solar + (grid_import or 0.0) + (battery_discharge or 0.0) - (grid_export or 0.0) - (battery_charge or 0.0)
                 house = max(house, 0.0)
                 house_source = "calculated_energy_balance"
+
+        net_grid_power = ((grid_import or 0.0) - (grid_export or 0.0)) if (grid_import is not None or grid_export is not None) and not grid_evidence_missing else None
+        net_battery_power = battery_power
 
         generation_sources = {
             "solar": self._power(solar),
@@ -361,7 +429,9 @@ class EnergyFlowEngine:
             "grid_import_power": self._power(grid_import),
             "grid_export_power": self._power(grid_export),
             "grid_power": self._power(grid_power),
+            "net_grid_power": self._power(net_grid_power),
             "battery_power": self._power(battery_power),
+            "net_battery_power": self._power(net_battery_power),
             "battery_charge_power": self._power(battery_charge),
             "battery_discharge_power": self._power(battery_discharge),
             "battery_soc_percent": battery_soc,
@@ -375,6 +445,12 @@ class EnergyFlowEngine:
             "grid_mode": grid_mode,
             "grid_sign_convention": grid_sign,
             "grid_direction": "importing" if (grid_import or 0) > 0 else "exporting" if (grid_export or 0) > 0 else "idle",
+            "grid_sign_semantics": "net_grid_power positive = import, negative = export",
+            "battery_sign_semantics": "net_battery_power positive = discharge, negative = charge",
+            "grid_evidence_missing": grid_evidence_missing,
+            "battery_evidence_missing": battery_evidence_missing,
+            "flow_evidence_missing": missing_evidence,
+            "flow_evidence_complete": not missing_evidence,
             "battery_mode": battery_mode,
             "battery_sign_convention": battery_sign,
             "battery_sign_explicitly_configured": battery_sign_configured,
@@ -389,7 +465,7 @@ class EnergyFlowEngine:
             "battery_dc_current_a": battery_dc_current,
             "battery_dc_voltage_v": battery_dc_voltage,
             "battery_dc_power_w": dc_power_w,
-            "battery_power_source": "byd_dc_voltage_x_current" if dc_power_w is not None else "mapped_power",
+            "battery_power_source": "byd_dc_voltage_x_current" if dc_power_w is not None else battery_source,
             "hybrid_inverter_correction_active": hybrid_enabled,
             "solar_power_raw_ac_w": solar_raw_ac,
             "solar_hybrid_correction_w": solar_hybrid_correction,

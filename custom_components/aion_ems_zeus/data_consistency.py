@@ -11,6 +11,8 @@ from typing import Any
 
 from homeassistant.util import dt as dt_util
 
+from .flow_access import flow_soc
+
 from .period_authority import canonical_period_window, trusted_data_epoch
 
 
@@ -87,7 +89,7 @@ class DataConsistencyEngine:
             "home_today_kwh": mapped_number("house_energy_today", "house_energy_kwh"),
             "grid_import_today_kwh": mapped_number("grid_import_energy_today", "grid_import_energy_kwh"),
             "grid_export_today_kwh": mapped_number("grid_export_energy_today", "grid_export_energy_kwh"),
-            "battery_soc_percent": self._number(flow.get("battery_soc_percent")),
+            "battery_soc_percent": self._number(flow_soc(flow)),
         }
         sources = {
             "solar_today_kwh": mapped_source("solar_energy_today", "solar_energy_kwh_source"),
@@ -125,7 +127,7 @@ class DataConsistencyEngine:
                 "battery_soc_percent": self._number(briefing.get("battery_soc_percent")),
             },
             "Energy Flow": {
-                "battery_soc_percent": self._number(flow.get("battery_soc_percent")),
+                "battery_soc_percent": self._number(flow_soc(flow)),
             },
         }
 

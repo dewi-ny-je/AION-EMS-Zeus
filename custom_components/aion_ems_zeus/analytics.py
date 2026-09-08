@@ -458,12 +458,13 @@ class HistoricalAnalyticsEngine:
             state = self.hass.states.get(entity_id)
             if state is None or str(state.state).strip().lower() in {"", "unknown", "unavailable", "none"}:
                 continue
-            state_class = str(state.attributes.get("state_class") or "").strip().lower()
-            # A Today slot may be mapped to the same cumulative meter used by
-            # Home Assistant Energy. Its raw state is lifetime energy, not today's
-            # energy. Recorder already provides the correct local-day delta.
-            if state_class in {"total", "total_increasing"}:
-                continue
+            # This entity is explicitly mapped in a *_today slot, so the mapping
+            # itself defines it as the current-day authority. Home Assistant
+            # Utility Meter / daily-reset sensors commonly expose state_class
+            # total or total_increasing even though their state resets each day.
+            # Rejecting those classes here incorrectly replaced the user's mapped
+            # daily meter with a partial Recorder/integration fallback. Lifetime
+            # cumulative meters belong in the corresponding *_total slot instead.
             try:
                 value = float(state.state)
             except (TypeError, ValueError):

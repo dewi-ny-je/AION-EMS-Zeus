@@ -4,6 +4,8 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any
 
+from ..flow_access import flow_soc, flow_w
+
 
 class ZeusBrainCore:
     """Unify live observations and learned intelligence without device control."""
@@ -36,13 +38,13 @@ class ZeusBrainCore:
 
     def _observe(self, now: str, flow: dict[str, Any]) -> None:
         current = {
-            "solar": self._num(flow.get("solar_power") or flow.get("solar_power_w")),
-            "home": self._num(flow.get("house_power") or flow.get("house_power_w")),
-            "import": self._num(flow.get("grid_import_power") or flow.get("grid_import_power_w")),
-            "export": self._num(flow.get("grid_export_power") or flow.get("grid_export_power_w")),
-            "charge": self._num(flow.get("battery_charge_power") or flow.get("battery_charge_power_w")),
-            "discharge": self._num(flow.get("battery_discharge_power") or flow.get("battery_discharge_power_w")),
-            "soc": self._num(flow.get("battery_soc_percent"), -1),
+            "solar": flow_w(flow, "solar_power", 0.0),
+            "home": flow_w(flow, "house_power", 0.0),
+            "import": flow_w(flow, "grid_import_power", 0.0),
+            "export": flow_w(flow, "grid_export_power", 0.0),
+            "charge": flow_w(flow, "battery_charge_power", 0.0),
+            "discharge": flow_w(flow, "battery_discharge_power", 0.0),
+            "soc": flow_soc(flow, -1),
         }
         events: list[tuple[str, str]] = []
         p = self._previous

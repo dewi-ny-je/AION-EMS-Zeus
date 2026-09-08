@@ -5,6 +5,8 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Any
 
+from ..flow_access import flow_values
+
 
 class ContextBuilder:
     """Collect only the compact facts needed by the intelligence layer."""
@@ -30,13 +32,7 @@ class ContextBuilder:
         return {
             "generated_at": datetime.now(timezone.utc).isoformat(),
             "energy": {
-                "solar_w": flow.get("solar_power_w", flow.get("solar_w")),
-                "home_w": flow.get("home_power_w", flow.get("home_w")),
-                "grid_import_w": flow.get("grid_import_power_w", flow.get("grid_import_w")),
-                "grid_export_w": flow.get("grid_export_power_w", flow.get("grid_export_w")),
-                "battery_soc_percent": flow.get("battery_soc_percent", flow.get("battery_soc")),
-                "battery_charge_w": flow.get("battery_charge_power_w"),
-                "battery_discharge_w": flow.get("battery_discharge_power_w"),
+                **flow_values(flow),
                 "operating_state": flow.get("operating_state", flow.get("status")),
             },
             "forecast": {

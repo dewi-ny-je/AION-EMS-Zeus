@@ -627,7 +627,7 @@ input:focus-visible,select:focus-visible,textarea:focus-visible,button:focus-vis
 /* v14.8.5 Diagnostic Report Export */
 .diagnostics-center-page .diagnostic-report-panel{margin-top:28px}.diagnostics-center-page .diagnostic-report-preview{max-height:420px;overflow:auto;white-space:pre-wrap;word-break:break-word;padding:16px;border:1px solid rgba(127,160,190,.16);border-radius:12px;background:rgba(7,16,25,.55);color:var(--text);font:12px/1.5 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}.diagnostics-center-page .diagnostics-selftest-actions{display:flex;gap:10px;flex-wrap:wrap}
 </style>
-    <h1>AION EMS Zeus Device Manager</h1><div class="sub">Version ${this.esc(this.s("sensor.aion_ems_zeus_platform_status")?.attributes?.version||"16.0.0")} · Registry & Diagnostics Center.</div>
+    <h1>AION EMS Zeus Device Manager</h1><div class="sub">Version ${this.esc(this.s("sensor.aion_ems_zeus_platform_status")?.attributes?.version||"16.0.3")} · Registry & Diagnostics Center.</div>
     <div class="status"><b>${this.esc(managerStatus)}</b>${this._error?`<div class="bad">${this.esc(this._error)}</div>`:""}<div>${this.esc(managerMessage)}</div></div>
     <div class="overview"><div><span>Energy mapping</span><b>${this.esc(mappingLabel)}</b></div><div><span>Registered devices</span><b>${deviceCount}</b></div><div><span>Energy flow</span><b>${this.esc(this.s("sensor.aion_ems_zeus_energy_flow")?.state||"Unknown")}</b></div><div><span>Diagnostics</span><b>${this.esc(this.s("sensor.aion_ems_zeus_diagnostics")?.state||"Unknown")}</b></div></div>
     <div class="section-nav"><button class="navbtn active" data-jump="energySources">1 · Energy Sources</button><button class="navbtn" data-jump="registeredDevices">2 · Registered Devices</button></div>
@@ -1043,20 +1043,13 @@ class AionEmsEnergyFlowDashboard extends HTMLElement {
         continue;
       }
       if(!st||['unknown','unavailable','none',''].includes(String(st.state).trim().toLowerCase()))continue;
-      const stateClass=String(st.attributes?.state_class||'').trim().toLowerCase();
       /*
-       * A *_today mapping is allowed to point at a genuine daily-reset meter.
-       * It must NEVER consume the raw state of a total/total_increasing meter:
-       * that state is cumulative/lifetime, not today's energy. In that case the
-       * canonical Historical Analytics / Recorder calendar-day delta already in
-       * `base` remains authoritative.
+       * An entity explicitly mapped in a *_today slot is the current-day
+       * authority. HA Utility Meter / daily-reset sensors commonly use
+       * state_class total or total_increasing, so state_class alone cannot be
+       * used to reject their live daily state. Lifetime cumulative meters belong
+       * in the corresponding *_total mapping instead.
        */
-      if(stateClass==='total_increasing'||stateClass==='total'){
-        out[`${key}_method`]=out[`${key}_method`]||'recorder_daily_change_from_cumulative_meter';
-        out[`${key}_source`]=out[`${key}_source`]||id;
-        out[`${key}_raw_today_mapping_rejected`]=true;
-        continue;
-      }
       let v=Number(st.state);if(!Number.isFinite(v))continue;
       const u=String(st.attributes?.unit_of_measurement||'kWh').trim().toLowerCase();
       if(u==='wh')v/=1000;else if(u==='mwh')v*=1000;else if(!['kwh','kilowatt-hour','kilowatt-hours'].includes(u))continue;
@@ -1104,29 +1097,32 @@ class AionEmsEnergyFlowDashboard extends HTMLElement {
       out[key]=corrected;
     }
     if(out.period_evidence_complete!==false)out.period_evidence_complete=true;
-    const solar=Math.max(0,Number(out.solar_energy_kwh)||0),home=Math.max(0,Number(out.house_energy_kwh)||0),exp=Math.max(0,Number(out.grid_export_energy_kwh)||0),dis=Math.max(0,Number(out.battery_discharge_energy_kwh)||0);
-    const direct=Math.min(Math.max(solar-exp,0),home);
-    out.direct_solar_consumption_kwh=direct;
-    out.self_consumption_percent=solar>0?direct/solar*100:null;
-    const localSupply=Math.min(home,direct+dis);
-    out.self_sufficiency_percent=home>0?localSupply/home*100:null;
+    const allocation=this.periodEnergyAllocation(out);
+    Object.assign(out,allocation);
+    out.house_energy_kwh_measured=allocation.measured_house_statistic_kwh;
+    out.house_energy_kwh=allocation.home_consumption_kwh;
     out.live_period_reconciled=true;
     out.live_period_reconciliation='current_day_delta';
     return out;
   }
+  periodEnergyAllocation(row={}){
+    const n=v=>{const x=Number(v);return Number.isFinite(x)?Math.max(0,x):0;};
+    const solar=n(row.solar_energy_kwh),imp=n(row.grid_import_energy_kwh),exp=n(row.grid_export_energy_kwh);
+    const charge=n(row.battery_charge_energy_kwh),discharge=n(row.battery_discharge_energy_kwh);
+    const hasHome=Object.prototype.hasOwnProperty.call(row,'house_energy_kwh')&&Number.isFinite(Number(row.house_energy_kwh));
+    const measuredHome=hasHome?Math.max(0,Number(row.house_energy_kwh)):null;
+    const balancedHome=Math.max(0,solar+imp+discharge-exp-charge);
+    const home=hasHome?measuredHome:balancedHome;
+    const localSupply=Math.max(0,home-imp);
+    const batteryToHome=Math.min(discharge,localSupply);
+    const directSolar=Math.min(solar,Math.max(0,localSupply-batteryToHome));
+    return {home_consumption_kwh:home,home_consumption_authority:hasHome?'canonical_house_energy':'whole_home_energy_balance',home_consumption_balance_kwh:balancedHome,measured_house_statistic_kwh:measuredHome,local_home_supply_kwh:localSupply,battery_support_to_home_kwh:batteryToHome,direct_solar_consumption_kwh:directSolar,self_consumption_percent:solar>0?directSolar/solar*100:null,self_sufficiency_percent:home>0?localSupply/home*100:null,grid_dependency_percent:home>0?imp/home*100:null,export_exceeds_solar:exp>solar+0.05};
+  }
   financePeriodData(period='today',finance={}){
     const energy=this.periodData(period)||{},n=v=>Math.max(0,Number(v)||0);
-    const measuredHome=n(energy.house_energy_kwh),solar=n(energy.solar_energy_kwh),imp=n(energy.grid_import_energy_kwh),exp=n(energy.grid_export_energy_kwh),charge=n(energy.battery_charge_energy_kwh),discharge=n(energy.battery_discharge_energy_kwh);
-    // Whole-home Finance follows the physical energy balance used by HA Energy:
-    // direct solar = production - grid export - battery charging,
-    // home = grid import + direct solar + battery discharge support.
-    // A narrower/legacy house statistic must not cap these measured flows.
-    const directSolar=Math.max(0,solar-exp-charge);
-    const batteryToHome=Math.max(0,discharge);
-    const balancedHome=Math.max(0,imp+directSolar+batteryToHome);
-    const home=balancedHome>0?balancedHome:measuredHome;
-    const localHome=Math.max(0,home-imp);
-    return {...energy,finance_home_kwh:home,finance_measured_house_statistic_kwh:measuredHome,finance_home_balance_kwh:balancedHome,finance_solar_kwh:solar,finance_import_kwh:imp,finance_export_kwh:exp,finance_battery_charge_kwh:charge,finance_battery_discharge_kwh:discharge,finance_local_home_supply_kwh:localHome,finance_direct_solar_to_home_kwh:directSolar,finance_battery_support_to_home_kwh:batteryToHome,finance_battery_support_method:'measured_discharge',finance_avoided_import_kwh:directSolar+batteryToHome,finance_energy_authority:balancedHome>0?'whole_home_energy_balance':'canonical_period_energy'};
+    const a=this.periodEnergyAllocation(energy);
+    const solar=n(energy.solar_energy_kwh),imp=n(energy.grid_import_energy_kwh),exp=n(energy.grid_export_energy_kwh),charge=n(energy.battery_charge_energy_kwh),discharge=n(energy.battery_discharge_energy_kwh);
+    return {...energy,finance_home_kwh:a.home_consumption_kwh,finance_measured_house_statistic_kwh:a.measured_house_statistic_kwh,finance_home_balance_kwh:a.home_consumption_balance_kwh,finance_solar_kwh:solar,finance_import_kwh:imp,finance_export_kwh:exp,finance_battery_charge_kwh:charge,finance_battery_discharge_kwh:discharge,finance_local_home_supply_kwh:a.local_home_supply_kwh,finance_direct_solar_to_home_kwh:a.direct_solar_consumption_kwh,finance_battery_support_to_home_kwh:a.battery_support_to_home_kwh,finance_battery_support_method:'measured_discharge',finance_avoided_import_kwh:a.direct_solar_consumption_kwh+a.battery_support_to_home_kwh,finance_energy_authority:a.home_consumption_authority};
   }
   financePeriodValueData(period='today',finance={}){
     // Shared Finance-period value authority for the Finance UI and Copilot.
@@ -1689,8 +1685,9 @@ class AionEmsEnergyFlowDashboard extends HTMLElement {
 
     const importTariff=Math.max(0,n(finance.import_tariff));
     const exportTariff=Math.max(0,n(finance.export_tariff));
-    const directSolar=Math.max(0,Math.min(home,solar-exp));
-    const batterySupport=Math.max(0,Math.min(discharged,Math.max(0,home-imp-directSolar)));
+    const overviewAllocation=this.periodEnergyAllocation(today);
+    const directSolar=overviewAllocation.direct_solar_consumption_kwh;
+    const batterySupport=overviewAllocation.battery_support_to_home_kwh;
     const gridCost=imp*importTariff,exportIncome=exp*exportTariff;
     const savings=finance.net_savings_today??finance.net_benefit_today??finance.savings_today??finance.estimated_savings_today??((directSolar+batterySupport)*importTariff+exportIncome-gridCost);
     const currency=finance.currency||'CHF';
@@ -2367,9 +2364,10 @@ class AionEmsEnergyFlowDashboard extends HTMLElement {
     const liveImp=Math.max(0,n(this.value('sensor.aion_ems_zeus_grid_import_power'))), liveExp=Math.max(0,n(this.value('sensor.aion_ems_zeus_grid_export_power')));
     const liveCharge=Math.max(0,n(this.value('sensor.aion_ems_zeus_battery_charge_power'))), liveDis=Math.max(0,n(this.value('sensor.aion_ems_zeus_battery_discharge_power')));
     const socRaw=this.s('sensor.aion_ems_zeus_battery_soc')?.state, soc=Number(socRaw);
-    const local=home>0?Math.max(0,Math.min(100,(home-imp)/home*100)):0;
-    const selfUse=solar>0?Math.max(0,Math.min(100,(solar-exp)/solar*100)):0;
-    const gridDep=home>0?Math.max(0,Math.min(100,imp/home*100)):0;
+    const todayAllocation=this.periodEnergyAllocation(today);
+    const local=Math.max(0,Math.min(100,Number(todayAllocation.self_sufficiency_percent)||0));
+    const selfUse=Math.max(0,Math.min(100,Number(todayAllocation.self_consumption_percent)||0));
+    const gridDep=Math.max(0,Math.min(100,Number(todayAllocation.grid_dependency_percent)||0));
     const raw=n(forecast.raw_expected_solar_next_24h_kwh,forecast.expected_solar_next_24h_kwh), corrected=n(forecast.expected_solar_next_24h_kwh,raw);
     const corr=adaptive.applied_correction_percent, trust=accuracy.trust_percent??adaptive.forecast_trust_percent, trustSamples=accuracy.sample_count??adaptive.forecast_trust_sample_count??0, learnConf=adaptive.learning_confidence_percent??learn.confidence_percent;
     const directSolarToHome=Math.max(0,n(financeToday.finance_direct_solar_to_home_kwh)), batterySupport=Math.max(0,n(financeToday.finance_battery_support_to_home_kwh));
@@ -2445,7 +2443,7 @@ class AionEmsEnergyFlowDashboard extends HTMLElement {
     const registrySummary=this.s('sensor.aion_ems_zeus_registry_summary')?.attributes||{}, registryCount=Math.max(0,n(registrySummary.device_count,Array.isArray(registrySummary.devices)?registrySummary.devices.length:0));
     const deaCoverage=registryCount>0&&deaMeasured>0?Math.max(0,Math.min(100,deaMeasured/registryCount*100)):null;
     const solar=n(today.solar_energy_kwh), home=n(today.house_energy_kwh), imp=n(today.grid_import_energy_kwh), exp=n(today.grid_export_energy_kwh);
-    const local=home>0?Math.max(0,Math.min(100,(home-imp)/home*100)):0, selfUse=solar>0?Math.max(0,Math.min(100,(solar-exp)/solar*100)):0, gridDep=home>0?Math.max(0,Math.min(100,imp/home*100)):0;
+    const alloc=this.periodEnergyAllocation(today), local=Math.max(0,Math.min(100,Number(alloc.self_sufficiency_percent)||0)), selfUse=Math.max(0,Math.min(100,Number(alloc.self_consumption_percent)||0)), gridDep=Math.max(0,Math.min(100,Number(alloc.grid_dependency_percent)||0));
     const raw=n(f.raw_expected_solar_next_24h_kwh,f.expected_solar_next_24h_kwh), corrected=n(f.expected_solar_next_24h_kwh,raw), corr=adaptive.applied_correction_percent;
     const score=perf.performance_score??perf.score??perf.energy_performance_score, delta=perf.performance_delta??perf.score_delta??perf.delta;
     const health=n(h.system_score??h.overall_score??h.score,q.quality_score??100), dq=q.quality_score??q.score;
@@ -2693,15 +2691,9 @@ class AionEmsEnergyFlowDashboard extends HTMLElement {
     const next24Solar=Math.max(0,Number(forecast.expected_solar_next_24h_kwh)||0), next24Demand=Math.max(0,Number(forecast.expected_consumption_next_24h_kwh)||0);
     const forecastRangeLabel=forecastRange.low_kwh!=null&&forecastRange.high_kwh!=null?`${Number(forecastRange.low_kwh).toFixed(1)}–${Number(forecastRange.high_kwh).toFixed(1)} kWh`:'Range collecting';
     const solar=Number(t.solar_energy_kwh)||0,home=Number(t.house_energy_kwh)||0,imp=Number(t.grid_import_energy_kwh)||0,exp=Number(t.grid_export_energy_kwh)||0,batteryCharged=Math.max(0,Number(t.battery_charge_energy_kwh)||0),batteryDischarged=Math.max(0,Number(t.battery_discharge_energy_kwh)||0);
-    const canonicalFinance=this.financePeriodData(period,finance),reportedBatterySupport=Math.max(0,Number(canonicalFinance.finance_battery_support_to_home_kwh)||0),reportedDirectSolar=Math.max(0,Number(canonicalFinance.finance_direct_solar_to_home_kwh)||0);
-    // One measured routing contract owns Statistics after the HA Energy source-set
-    // correction. This prevents stale finance attribution from making Solar 0%
-    // or double-counting Battery support.
-    const measuredLocalSolar=Math.max(0,Math.min(home,solar-exp));
-    const directSolarToHome=(reportedDirectSolar>0&&reportedDirectSolar<=Math.min(home,solar)+0.05&&Math.abs(reportedDirectSolar-measuredLocalSolar)<=0.15)?reportedDirectSolar:measuredLocalSolar;
-    const measuredBatteryResidual=Math.max(0,home-imp-directSolarToHome);
-    const reportedRoutingCloses=Math.abs((directSolarToHome+imp+reportedBatterySupport)-home)<=0.15;
-    const batterySupport=reportedRoutingCloses?reportedBatterySupport:measuredBatteryResidual;
+    const canonicalFinance=this.financePeriodData(period,finance);
+    const directSolarToHome=Math.max(0,Number(canonicalFinance.finance_direct_solar_to_home_kwh)||0);
+    const batterySupport=Math.max(0,Number(canonicalFinance.finance_battery_support_to_home_kwh)||0);
     const importTariff=Math.max(0,Number(finance.import_tariff)||0),exportTariff=Math.max(0,Number(finance.export_tariff)||0);
     const solarValue=solar*importTariff,consumptionValue=home*importTariff,importValue=imp*importTariff,exportValue=exp*exportTariff,batteryValue=batterySupport*importTariff;
     const measuredSelfSuff=home>0?Math.max(0,Math.min(100,(home-imp)/home*100)):null,measuredSelfUse=solar>0?Math.max(0,Math.min(100,directSolarToHome/solar*100)):null;
@@ -2804,7 +2796,7 @@ class AionEmsEnergyFlowDashboard extends HTMLElement {
   commandCenterPage(){
     const n=(v,d=0)=>{const x=Number(v);return Number.isFinite(x)?x:d;};
     const today=this.periodData('today')||{}, quality=this.s('sensor.aion_ems_zeus_data_quality')?.attributes||{}, health=this.s('sensor.aion_ems_zeus_system_health')?.attributes||{}, forecast=this.s('sensor.aion_ems_zeus_forecast')?.attributes||{}, accuracy=this.s('sensor.aion_ems_zeus_prediction_accuracy')?.attributes||{}, learning=this.s('sensor.aion_ems_zeus_learning_intelligence')?.attributes||this.s('sensor.aion_ems_zeus_learning_preview')?.attributes||{}, weather=this.s('sensor.aion_ems_zeus_weather_context')?.attributes||{}, efficiency=this.s('sensor.aion_ems_zeus_home_efficiency')?.attributes||{}, seasonal=this.s('sensor.aion_ems_zeus_seasonal_analysis','sensor.aion_ems_zeus_energy_topology')?.attributes||{}, predictiveBattery=this.s('sensor.aion_ems_zeus_predictive_battery')?.attributes||{}, finance=this.s('sensor.aion_ems_zeus_finance_summary')?.attributes||{}, now=new Date();
-    const zeusVersion=String(this.s('sensor.aion_ems_zeus_platform_status')?.attributes?.version||'16.0.0').replace(/^v/i,'');
+    const zeusVersion=String(this.s('sensor.aion_ems_zeus_platform_status')?.attributes?.version||'16.0.3').replace(/^v/i,'');
     const control=this.s('sensor.aion_ems_zeus_smart_control_safety')?.attributes||{};
     const solar=Math.max(0,n(this.value('sensor.aion_ems_zeus_solar_power'))),home=Math.max(0,n(this.value('sensor.aion_ems_zeus_house_power'))),imp=Math.max(0,n(this.value('sensor.aion_ems_zeus_grid_import_power'))),exp=Math.max(0,n(this.value('sensor.aion_ems_zeus_grid_export_power'))),ch=Math.max(0,n(this.value('sensor.aion_ems_zeus_battery_charge_power'))),dis=Math.max(0,n(this.value('sensor.aion_ems_zeus_battery_discharge_power')));
     const isLoadDevice=d=>{if(d?.hybrid_inverter===true)return false;const text=[d?.type,d?.category,d?.role,d?.device_class,d?.name,d?.manufacturer,d?.model].filter(Boolean).join(' ').toLowerCase();const sourceTypes=['solar','photovoltaic','pv','inverter','fronius symo','fronius hybrid','battery inverter','smart meter','grid meter','energy meter','power meter','meter'];return !sourceTypes.some(x=>text.includes(x));};
@@ -3186,7 +3178,7 @@ class AionEmsEnergyFlowDashboard extends HTMLElement {
     const control=this.s('sensor.aion_ems_zeus_smart_control_safety')?.attributes||{};
     const qa=this.s('sensor.aion_ems_zeus_qa_diagnostics')?.attributes||{};
     const perf=this.s('sensor.aion_ems_zeus_performance_diagnostics')?.attributes||{};
-    const version=String(platform.version||'16.0.0').replace(/^v/i,'');
+    const version=String(platform.version||'16.0.3').replace(/^v/i,'');
     const source=flow.source_snapshot&&typeof flow.source_snapshot==='object'?flow.source_snapshot:{};
     const sourceKeys=['solar_power','grid_import_power','grid_export_power','battery_charge_power','battery_discharge_power','grid_power','battery_power'];
     const sources={};
@@ -3196,7 +3188,7 @@ class AionEmsEnergyFlowDashboard extends HTMLElement {
     const simulations=(Array.isArray(control.simulations)?control.simulations:[]).map(x=>({device_id:x.device_id||null,allowed:x.allowed,reason:x.reason||null,requested_power_w:x.requested_power_w??null,live:x.live?{surplus_w:x.live.surplus_w??null,boiler_temperature_c:x.live.boiler_temperature_c??null,element_temperature_c:x.live.element_temperature_c??null}:null,execution:x.execution?{status:x.execution.status||null,active:x.execution.active,last_value_w:x.execution.last_value_w??null,last_write_at:x.execution.last_write_at||null,last_error:x.execution.last_error||null,interlocks:Array.isArray(x.execution.interlocks)?x.execution.interlocks:[]}:null}));
     const goe=(((control.goe_mqtt||{}).devices)||[]).map(x=>({device_id:x.device_id||null,active:!!x.active,topic:x.topic||null,grid_power_entity:x.grid_power_entity||null,last_publish_at:x.last_publish_at||null,last_error:x.last_error||null}));
     const checks=Array.isArray(qa.checks)?qa.checks.slice(0,50).map(x=>({category:x.category||x.area||null,name:x.name||x.check||x.title||null,status:x.status||x.result||null,message:x.message||x.detail||null})):[];
-    const report={report_schema:'aion_ems_zeus_diagnostic_report_v1',generated_at:new Date().toISOString(),privacy:'No credentials, passwords, access tokens, MQTT credentials, NAS server addresses or secret connection data are included.',system:{zeus_version:version,frontend_version:'16.0.0',registered_devices:devices.length,performance:perf.status||perf.mode||null,recorder_attribute_limit_bytes:16384,energy_flow_recorder_protected:true},energy_flow:{status:flowRoot.status||flowState?.state||null,snapshot_completed:flow.snapshot_completed||flow.flow_snapshot_completed||flow.snapshot_timestamp||flow.last_updated||null,update_latency_ms:flowRoot.update_latency_ms??flow.update_latency_ms??perf.update_latency_ms??'unavailable',source_skew_ms:flow.source_skew_ms??null,house_power_w:this.value('sensor.aion_ems_zeus_house_power'),solar_power_w:this.value('sensor.aion_ems_zeus_solar_power'),grid_import_power_w:this.value('sensor.aion_ems_zeus_grid_import_power'),grid_export_power_w:this.value('sensor.aion_ems_zeus_grid_export_power'),battery_charge_power_w:this.value('sensor.aion_ems_zeus_battery_charge_power'),battery_discharge_power_w:this.value('sensor.aion_ems_zeus_battery_discharge_power'),sources},registered_devices:devices,smart_control:{execution_path:control.execution_path||null,registered_devices:control.registered_devices??devices.length,controllable_candidates:control.controllable_candidates??null,permissioned_candidates:control.permissioned_candidates??null,devices:focused,simulations,goe_mqtt:goe},self_test:{status:qa.status||'Not run',score:qa.score??null,grade:qa.grade||null,passed:qa.passed_count??null,warnings:qa.warning_count??null,errors:qa.error_count??null,checks}}; return this._sanitizeDiagnosticExport(report);
+    const report={report_schema:'aion_ems_zeus_diagnostic_report_v1',generated_at:new Date().toISOString(),privacy:'No credentials, passwords, access tokens, MQTT credentials, NAS server addresses or secret connection data are included.',system:{zeus_version:version,frontend_version:'16.0.3',registered_devices:devices.length,performance:perf.status||perf.mode||null,recorder_attribute_limit_bytes:16384,energy_flow_recorder_protected:true},energy_flow:{status:flowRoot.status||flowState?.state||null,snapshot_completed:flow.snapshot_completed||flow.flow_snapshot_completed||flow.snapshot_timestamp||flow.last_updated||null,update_latency_ms:flowRoot.update_latency_ms??flow.update_latency_ms??perf.update_latency_ms??'unavailable',source_skew_ms:flow.source_skew_ms??null,house_power_w:this.value('sensor.aion_ems_zeus_house_power'),solar_power_w:this.value('sensor.aion_ems_zeus_solar_power'),grid_import_power_w:this.value('sensor.aion_ems_zeus_grid_import_power'),grid_export_power_w:this.value('sensor.aion_ems_zeus_grid_export_power'),battery_charge_power_w:this.value('sensor.aion_ems_zeus_battery_charge_power'),battery_discharge_power_w:this.value('sensor.aion_ems_zeus_battery_discharge_power'),sources},registered_devices:devices,smart_control:{execution_path:control.execution_path||null,registered_devices:control.registered_devices??devices.length,controllable_candidates:control.controllable_candidates??null,permissioned_candidates:control.permissioned_candidates??null,devices:focused,simulations,goe_mqtt:goe},self_test:{status:qa.status||'Not run',score:qa.score??null,grade:qa.grade||null,passed:qa.passed_count??null,warnings:qa.warning_count??null,errors:qa.error_count??null,checks}}; return this._sanitizeDiagnosticExport(report);
   }
   _sanitizeDiagnosticExport(value){
     if(value==null) return value;
@@ -3327,7 +3319,7 @@ class AionEmsEnergyFlowDashboard extends HTMLElement {
     const platform=this.s('sensor.aion_ems_zeus_platform_status')?.attributes||{};
     const qa=this.s('sensor.aion_ems_zeus_qa_diagnostics')?.attributes||{};
     const perf=this.s('sensor.aion_ems_zeus_performance_diagnostics')?.attributes||{};
-    const version=String(platform.version||'16.0.0').replace(/^v/i,'');
+    const version=String(platform.version||'16.0.3').replace(/^v/i,'');
     const sourceSnapshot=flow.source_snapshot&&typeof flow.source_snapshot==='object'?flow.source_snapshot:{};
     const fmtTs=v=>{if(!v)return '—';try{return new Date(v).toLocaleString();}catch(_e){return String(v)}};
     const fmtVal=v=>{const n=Number(v);return Number.isFinite(n)?this.watts(n):'—';};
@@ -3395,7 +3387,7 @@ class AionEmsEnergyFlowDashboard extends HTMLElement {
     const latency=Number(flowRoot.update_latency_ms??flow.update_latency_ms??this.s('sensor.aion_ems_zeus_performance_diagnostics')?.attributes?.update_latency_ms);
     const skew=Number(flow.source_skew_ms);
     const supervised=Number(control.permissioned_candidates||0)>0?'Supervised control':'Observe only';
-    const frontendVersion='16.0.0';
+    const frontendVersion='16.0.3';
     const versionMatch=version===frontendVersion;
     const qaRun=!!(qa.status&&String(qa.status).toLowerCase()!=='not run');
     const qaErrors=Number(qa.error_count||0),qaWarnings=Number(qa.warning_count||0);
@@ -3404,7 +3396,7 @@ class AionEmsEnergyFlowDashboard extends HTMLElement {
     return `<section class="page diagnostics-center-page"><div class="page-head"><div><span>MANAGE · READ-ONLY</span><h1>Diagnostics</h1><p>See exactly what Zeus is reading, calculating and commanding. Diagnostics never changes mappings or device control.</p></div><div class="diagnostics-head-badges"><div class="badge ${overallHealthy?'good':'warn'}">${this.esc(overallLabel)}</div><div class="badge">Zeus v${this.esc(version)}</div></div></div>
       <article class="panel spaced"><div class="section-title"><div><span>ENERGY FLOW DIAGNOSTICS</span><h2>Atomic live snapshot</h2></div><b>${this.esc(flowStatus)}</b></div><div class="today-grid"><div><span>Solar</span><b>${this.watts(this.value('sensor.aion_ems_zeus_solar_power')||0)}</b></div><div><span>Grid net</span><b>${this.watts((this.value('sensor.aion_ems_zeus_grid_import_power')||0)-(this.value('sensor.aion_ems_zeus_grid_export_power')||0))}</b><small>Import − export</small></div><div><span>Battery net</span><b>${this.watts((this.value('sensor.aion_ems_zeus_battery_charge_power')||0)-(this.value('sensor.aion_ems_zeus_battery_discharge_power')||0))}</b><small>Charge − discharge</small></div><div><span>House</span><b>${this.watts(this.value('sensor.aion_ems_zeus_house_power')||0)}</b></div><div><span>Snapshot completed</span><b>${this.esc(fmtTs(snapshotCompleted))}</b></div><div><span>Update latency</span><b>${fmtTiming(latency)}</b></div><div><span>Source skew</span><b>${fmtTiming(skew)}</b></div></div><div class="diagnostic-detail-block" style="margin-top:28px"><div class="diagnostic-detail-stack energy-source-stack">${sourceRows}</div></div><small class="safety-note">Signed snapshot convention: Grid = import − export; Battery = charge − discharge. Source skew is diagnostic timing evidence. An unchanged Home Assistant entity can have an old last_changed timestamp while its current value remains valid.</small><div class="diag-subsection"><div class="diag-subsection-head"><div><span>MAPPING HEALTH</span><h3>Entity and accounting checks</h3></div><b>${mappingRows.length===1&&mappingRows[0].level==='good'?'Healthy':'Attention'}</b></div><div class="mapping-health-list" style="display:grid;gap:12px;margin-top:14px">${mappingHealthHtml}</div></div></article>
       <article class="panel spaced"><div class="section-title"><div><span>SMART CONTROL DIAGNOSTICS</span><h2>Decision and execution evidence</h2></div><b>${this.esc(supervised)}</b></div><div class="today-grid"><div><span>Execution path</span><b>${this.esc(control.execution_path==='supervised_elwa_modbus+goe_mqtt_ids'?'ELWA Modbus · go-e MQTT IDS':(control.execution_path||'—'))}</b></div><div><span>Registered devices</span><b>${this.esc(control.registered_devices??registered)}</b></div><div><span>Controllable</span><b>${this.esc(control.controllable_candidates??0)}</b></div><div><span>Permissioned</span><b>${this.esc(control.permissioned_candidates??0)}</b></div></div><div class="diagnostic-detail-block" style="margin-top:28px"><div class="diagnostic-detail-stack smart-control-stack">${controlRows}</div></div><small class="safety-note">Read-only view. Device permissions, ownership and safety gates remain authoritative.</small><div class="diag-subsection" style="margin-top:28px"><div class="diag-subsection-head" style="display:flex;justify-content:space-between;gap:14px;align-items:flex-end;margin-bottom:14px"><div><span>SMART CONTROL DECISION TRACE</span><h3>Evidence → safety → request → execution</h3></div><b>Read-only</b></div><div style="display:grid;gap:14px">${traceHtml}</div></div></article>
-      <article class="panel spaced"><div class="section-title"><div><span>SYSTEM DIAGNOSTICS</span><h2>Runtime and package health</h2></div><b>v${this.esc(version)}</b></div><div class="today-grid"><div><span>Installed Zeus</span><b>v${this.esc(version)}</b></div><div><span>Frontend</span><b>v16.0.0</b></div><div><span>Registered devices</span><b>${registered}</b></div><div><span>Self-test</span><b>${qaRun?this.esc(qa.status||'Completed'):'Not run'}</b><small>${qaRun?'Latest diagnostic self-test result':'Optional manual diagnostic; not a failure state'}</small></div><div><span>Self-test score</span><b>${qaRun&&qa.score!=null?this.esc(qa.score)+'%':'—'}</b><small>${qaRun?'Score from the latest self-test':'Run a self-test to generate a score'}</small></div><div><span>Performance</span><b>${this.esc(perf.status||perf.mode||'Available')}</b></div><div><span>Recorder limit</span><b>16,384 B</b></div><div><span>Energy Flow recorder</span><b>Protected</b></div></div><p>Frontend and backend version agreement is visible here so mixed-package installations can be identified immediately.</p><div class="button-row diagnostics-selftest-actions"><button id="run-qa-check" class="primary-button" type="button"><ha-icon icon="mdi:play-circle-outline"></ha-icon> Run Self-Test</button><button id="generate-diagnostic-report" type="button"><ha-icon icon="mdi:file-document-outline"></ha-icon> Generate Diagnostic Report</button><button id="generate-support-summary" type="button"><ha-icon icon="mdi:forum-outline"></ha-icon> Generate HA Community Support Report</button></div></article>${this._supportSummary?`<article class="panel spaced diagnostic-report-panel"><div class="section-title"><div><span>HA COMMUNITY SUPPORT</span><h2>Privacy-safe community support report</h2></div><b>Ready to paste</b></div><p>Privacy-safe report for posting on the Home Assistant Community forum, with Energy Sources mappings and live values.</p><pre class="diagnostic-report-preview">${this.esc(this._supportSummary)}</pre><div class="button-row"><button id="copy-support-summary" class="primary-button" type="button"><ha-icon icon="mdi:content-copy"></ha-icon> Copy summary</button><button id="download-support-summary" type="button"><ha-icon icon="mdi:download-outline"></ha-icon> Download TXT</button></div></article>`:''}${this._diagnosticReport?`<article class="panel spaced diagnostic-report-panel"><div class="section-title"><div><span>SUPPORT EXPORT</span><h2>Privacy-safe diagnostic report</h2></div><b>Generated locally</b></div><p>No credentials, passwords, access tokens, MQTT credentials, NAS server addresses or secret connection data are included.</p><pre class="diagnostic-report-preview">${this.esc(this._diagnosticReport)}</pre><div class="button-row"><button id="copy-diagnostic-report" class="primary-button" type="button"><ha-icon icon="mdi:content-copy"></ha-icon> Copy report</button><button id="download-diagnostic-report" type="button"><ha-icon icon="mdi:download-outline"></ha-icon> Download JSON</button></div></article>`:''}</section>`;
+      <article class="panel spaced"><div class="section-title"><div><span>SYSTEM DIAGNOSTICS</span><h2>Runtime and package health</h2></div><b>v${this.esc(version)}</b></div><div class="today-grid"><div><span>Installed Zeus</span><b>v${this.esc(version)}</b></div><div><span>Frontend</span><b>v16.0.3</b></div><div><span>Registered devices</span><b>${registered}</b></div><div><span>Self-test</span><b>${qaRun?this.esc(qa.status||'Completed'):'Not run'}</b><small>${qaRun?'Latest diagnostic self-test result':'Optional manual diagnostic; not a failure state'}</small></div><div><span>Self-test score</span><b>${qaRun&&qa.score!=null?this.esc(qa.score)+'%':'—'}</b><small>${qaRun?'Score from the latest self-test':'Run a self-test to generate a score'}</small></div><div><span>Performance</span><b>${this.esc(perf.status||perf.mode||'Available')}</b></div><div><span>Recorder limit</span><b>16,384 B</b></div><div><span>Energy Flow recorder</span><b>Protected</b></div></div><p>Frontend and backend version agreement is visible here so mixed-package installations can be identified immediately.</p><div class="button-row diagnostics-selftest-actions"><button id="run-qa-check" class="primary-button" type="button"><ha-icon icon="mdi:play-circle-outline"></ha-icon> Run Self-Test</button><button id="generate-diagnostic-report" type="button"><ha-icon icon="mdi:file-document-outline"></ha-icon> Generate Diagnostic Report</button><button id="generate-support-summary" type="button"><ha-icon icon="mdi:forum-outline"></ha-icon> Generate HA Community Support Report</button></div></article>${this._supportSummary?`<article class="panel spaced diagnostic-report-panel"><div class="section-title"><div><span>HA COMMUNITY SUPPORT</span><h2>Privacy-safe community support report</h2></div><b>Ready to paste</b></div><p>Privacy-safe report for posting on the Home Assistant Community forum, with Energy Sources mappings and live values.</p><pre class="diagnostic-report-preview">${this.esc(this._supportSummary)}</pre><div class="button-row"><button id="copy-support-summary" class="primary-button" type="button"><ha-icon icon="mdi:content-copy"></ha-icon> Copy summary</button><button id="download-support-summary" type="button"><ha-icon icon="mdi:download-outline"></ha-icon> Download TXT</button></div></article>`:''}${this._diagnosticReport?`<article class="panel spaced diagnostic-report-panel"><div class="section-title"><div><span>SUPPORT EXPORT</span><h2>Privacy-safe diagnostic report</h2></div><b>Generated locally</b></div><p>No credentials, passwords, access tokens, MQTT credentials, NAS server addresses or secret connection data are included.</p><pre class="diagnostic-report-preview">${this.esc(this._diagnosticReport)}</pre><div class="button-row"><button id="copy-diagnostic-report" class="primary-button" type="button"><ha-icon icon="mdi:content-copy"></ha-icon> Copy report</button><button id="download-diagnostic-report" type="button"><ha-icon icon="mdi:download-outline"></ha-icon> Download JSON</button></div></article>`:''}</section>`;
   }
 
   systemIntelligencePanel(){
@@ -3541,7 +3533,7 @@ class AionEmsEnergyFlowDashboard extends HTMLElement {
     const t=this.periodData('today')||{},m=this.periodData('month')||{};
     const importTariff=this.numberValue(f.import_tariff,0),exportTariff=this.numberValue(f.export_tariff,0);
     const solar=this.numberValue(t.solar_energy_kwh,0),home=this.numberValue(t.house_energy_kwh,0),imp=this.numberValue(t.grid_import_energy_kwh??f.grid_import_kwh,0),exp=this.numberValue(t.grid_export_energy_kwh??f.grid_export_kwh,0),charge=this.numberValue(t.battery_charge_energy_kwh??f.battery_charge_kwh,0),discharge=this.numberValue(t.battery_discharge_energy_kwh??f.battery_discharge_kwh,0);
-    const directSolar=this.numberValue(f.direct_solar_to_home_kwh??t.direct_solar_consumption_kwh,Math.max(0,Math.min(home,solar-exp)));
+    const directSolar=this.numberValue(f.direct_solar_to_home_kwh??t.direct_solar_consumption_kwh,this.periodEnergyAllocation(t).direct_solar_consumption_kwh);
     const batteryToHome=this.numberValue(f.battery_support_to_home_kwh,Math.min(discharge,Math.max(home-directSolar,0)));
     const directSolarSavings=directSolar*importTariff,exportRevenue=exp*exportTariff,batterySavings=batteryToHome*importTariff,gridCost=imp*importTariff;
     const monthSolar=this.numberValue(m.solar_energy_kwh,0),monthImp=this.numberValue(m.grid_import_energy_kwh,0),monthExp=this.numberValue(m.grid_export_energy_kwh,0),monthDischarge=this.numberValue(m.battery_discharge_energy_kwh,0);
@@ -5400,7 +5392,7 @@ class AionEmsEnergyFlowDashboard extends HTMLElement {
     const totalDev=Math.max(0.001,devices.reduce((n,d)=>n+(Number(d[devicePeriodKey])||0),0));
     const daily=Array.isArray(forecast.daily_forecast)?forecast.daily_forecast.slice(0,3):[];
     const best=history.best_solar_day||{},peak=history.peak_consumption_day||{};
-    const direct=Math.max(0,Math.min(solar-exp,home)),battery=Number(t.battery_discharge_energy_kwh)||0,other=Math.max(0,home-direct-battery-imp);
+    const supply=this.periodEnergyAllocation(t),direct=supply.direct_solar_consumption_kwh,battery=supply.battery_support_to_home_kwh,other=Math.max(0,home-direct-battery-imp);
     const batteryPlan=this.s('sensor.aion_ems_zeus_predictive_battery')?.attributes||{},batteryTimeline=Array.isArray(batteryPlan.timeline)?batteryPlan.timeline:[];
     const chargeEnergy=Number(t.battery_charge_energy_kwh)||0,dischargeEnergy=Number(t.battery_discharge_energy_kwh)||0,throughput=chargeEnergy+dischargeEnergy;
     const batteryEfficiency=chargeEnergy>0?Math.min(100,Math.max(0,dischargeEnergy/chargeEnergy*100)):null;
@@ -7125,8 +7117,9 @@ class AionEmsEnergyFlowDashboard extends HTMLElement {
     const avg=k=>days?recent.reduce((n,r)=>n+(Number(r[k])||0),0)/days:0;
     const total=k=>recent.reduce((n,r)=>n+(Number(r[k])||0),0);
     const solar=total('solar_energy_kwh'),home=total('house_energy_kwh'),imp=total('grid_import_energy_kwh'),exp=total('grid_export_energy_kwh'),charged=total('battery_charge_energy_kwh'),discharged=total('battery_discharge_energy_kwh');
-    const selfUsed=Math.max(0,Math.min(solar,solar-exp));
-    const selfConsumption=solar>0?Math.max(0,Math.min(100,selfUsed/solar*100)):null;
+    const behaviourAllocation=this.periodEnergyAllocation({solar_energy_kwh:solar,house_energy_kwh:home,grid_import_energy_kwh:imp,grid_export_energy_kwh:exp,battery_charge_energy_kwh:charged,battery_discharge_energy_kwh:discharged});
+    const selfUsed=behaviourAllocation.direct_solar_consumption_kwh;
+    const selfConsumption=behaviourAllocation.self_consumption_percent==null?null:Math.max(0,Math.min(100,behaviourAllocation.self_consumption_percent));
     const solarCoverage=home>0?Math.max(0,Math.min(100,selfUsed/home*100)):null;
     const batteryThroughput=charged+discharged;
     const batteryBalance=charged>0?Math.max(0,Math.min(100,discharged/charged*100)):null;
@@ -11416,7 +11409,7 @@ pre,code,.entity-id,.mono{overflow-wrap:anywhere;word-break:break-word}
 }
 
 
-/* v14.0.0-alpha.22.16.0.0 — Solar Performance Intelligence Foundation */
+/* v14.0.0-alpha.22.16.0.3 — Solar Performance Intelligence Foundation */
 .solar-page .solar-performance-intelligence-panel{margin-top:18px!important}
 .solar-page .solar-performance-intelligence-panel .solar-performance-grid{
   display:grid!important;
@@ -11434,7 +11427,7 @@ pre,code,.entity-id,.mono{overflow-wrap:anywhere;word-break:break-word}
   .solar-page .solar-performance-intelligence-panel .solar-performance-grid{grid-template-columns:1fr!important}
 }
 
-/* v14.0.0-alpha.22.16.0.1 — Solar Production Pattern Intelligence */
+/* v14.0.0-alpha.22.16.0.3 — Solar Production Pattern Intelligence */
 .solar-page .solar-production-pattern .solar-pattern-grid{
   display:grid!important;
   grid-template-columns:repeat(2,minmax(0,1fr))!important;

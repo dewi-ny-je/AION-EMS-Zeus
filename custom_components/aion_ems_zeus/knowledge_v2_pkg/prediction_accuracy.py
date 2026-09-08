@@ -9,6 +9,8 @@ from collections import deque
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
+from ..flow_access import flow_soc, flow_w
+
 
 class PredictionAccuracyEngine:
     """Track real forward forecast-versus-measured comparisons.
@@ -72,13 +74,12 @@ class PredictionAccuracyEngine:
 
     def _actual(self) -> dict[str, float | None]:
         flow = self.core.energy_flow.summary() or {}
-        flows = flow.get("flows") or flow
         return {
-            "solar": self._num(flows.get("solar_power_w")),
-            "home": self._num(flows.get("house_power_w") or flows.get("home_power_w")),
-            "grid_import": self._num(flows.get("grid_import_power_w")),
-            "grid_export": self._num(flows.get("grid_export_power_w")),
-            "battery_soc": self._num(flows.get("battery_soc_percent")),
+            "solar": flow_w(flow, "solar_power"),
+            "home": flow_w(flow, "house_power"),
+            "grid_import": flow_w(flow, "grid_import_power"),
+            "grid_export": flow_w(flow, "grid_export_power"),
+            "battery_soc": flow_soc(flow),
         }
 
     def _timeline(self) -> list[dict[str, Any]]:
