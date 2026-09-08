@@ -19,6 +19,7 @@ from homeassistant.helpers.restore_state import RestoreEntity
 from homeassistant.helpers import entity_registry as er
 
 from .const import DOMAIN, NAME, VERSION
+from .flow_access import flow_w
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -2020,17 +2021,14 @@ class EVSurplusGridSignalSensor(CoordinatorEntity, SensorEntity):
 
     def _snapshot(self) -> tuple[float | None, dict[str, Any]]:
         flow = self.core.energy_flow.summary() or {}
-        flows = flow.get("flows") or {}
-        imp = flows.get("grid_import_power")
-        exp = flows.get("grid_export_power")
-        imp_w = imp.get("w") if isinstance(imp, dict) else None
-        exp_w = exp.get("w") if isinstance(exp, dict) else None
-        try:
-            imp_w = max(float(imp_w or 0.0), 0.0)
-            exp_w = max(float(exp_w or 0.0), 0.0)
-        except (TypeError, ValueError):
+        # Canonical signed grid balance. The subtraction used to live here and in
+        # Switch Hub with opposite sign conventions; both now read the one value
+        # Energy Flow publishes.
+        value = flow_w(flow, "net_grid_power")
+        if value is None:
             return None, {"available": False, "safety": "Read-only signal. No charger control."}
-        value = imp_w - exp_w
+        imp_w = max(value, 0.0)
+        exp_w = max(-value, 0.0)
         return round(value, 1), {
             "available": True,
             "grid_import_w": round(imp_w, 1),

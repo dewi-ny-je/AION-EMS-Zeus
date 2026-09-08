@@ -7,6 +7,8 @@ from typing import Any
 
 from homeassistant.util import dt as dt_util
 
+from .flow_access import flow_w
+
 
 class SwitchHubEngine:
     """Supervised binary switch control using solar surplus or a time window."""
@@ -88,23 +90,16 @@ class SwitchHubEngine:
         except Exception:
             refreshed = None
         flow = refreshed if isinstance(refreshed, dict) else (self.energy_flow.summary() or {})
-        nested_flows = flow.get("flows") if isinstance(flow.get("flows"), dict) else {}
-        export_raw = nested_flows.get("grid_export_power")
-        import_raw = nested_flows.get("grid_import_power")
-        flow_source = "flows"
-        if export_raw is None and import_raw is None:
-            export_raw = flow.get("grid_export_power")
-            import_raw = flow.get("grid_import_power")
-            flow_source = "top_level"
-
-        # v14.8.10.2: Energy Flow power values are canonical {w, kw} payloads.
-        def flow_power_w(value):
-            if isinstance(value, dict):
-                value = value.get("w")
-            return self._number(value)
-
-        export_w = max(0.0, flow_power_w(export_raw) or 0.0)
-        import_w = max(0.0, flow_power_w(import_raw) or 0.0)
+        # Canonical Energy Flow access. Direction comes from the one signed
+        # net_grid_power value (positive = import, negative = export) so the
+        # actuator can never disagree with the Overview or the EV grid signal.
+        net_grid_w = flow_w(flow, "net_grid_power")
+        flow_source = "flows_net_grid_power"
+        if net_grid_w is None:
+            net_grid_w = (flow_w(flow, "grid_import_power", 0.0) or 0.0) - (flow_w(flow, "grid_export_power", 0.0) or 0.0)
+            flow_source = "flows_import_export_channels"
+        export_w = max(0.0, -net_grid_w)
+        import_w = max(0.0, net_grid_w)
 
         configs = self._configs()
         prepared: list[dict[str, Any]] = []
