@@ -22,6 +22,7 @@ Zeus is designed to use real Home Assistant entities, Energy configuration and R
 - **Latest Releases:** [AION EMS Zeus Releases](https://github.com/showupch/AION-EMS-Zeus/releases)
 - **Setup Guides / Help:** [aion-ems.ch/setup-guide](https://aion-ems.ch/setup-guide/)
 - **Installation:** [Jump to Installation](#installation)
+- **Home Assistant Community Forum:** [AION EMS Zeus Forum Thread](https://community.home-assistant.io/t/aion-ems-zeus-energy-management-intelligence-for-home-assistant/1021982)
 
 [![Open your Home Assistant instance and open a repository inside the Home Assistant Community Store.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?repository=AION-EMS-Zeus&category=Integration&owner=Showupch)
 
